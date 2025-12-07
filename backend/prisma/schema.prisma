@@ -1,0 +1,819 @@
+// =============================================================================
+// Enterprise AI Foundation Platform - Prisma Schema
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// -----------------------------------------------------------------------------
+// Enums
+// -----------------------------------------------------------------------------
+
+enum Tier {
+  STARTER
+  PROFESSIONAL
+  ENTERPRISE
+}
+
+enum Role {
+  OWNER
+  ADMIN
+  ANALYST
+  VIEWER
+}
+
+enum DataSourceType {
+  M365
+  GOOGLE_WORKSPACE
+  ODOO
+  SAP_B1
+  DYNAMICS
+  HUBSPOT
+  SALESFORCE
+  CUSTOM
+}
+
+enum DataSourceStatus {
+  PENDING
+  CONNECTED
+  ERROR
+  DISABLED
+}
+
+enum SyncStatus {
+  SUCCESS
+  PARTIAL
+  FAILED
+}
+
+enum JobStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum AssessmentType {
+  ERP_READINESS
+  AI_READINESS
+  DATA_QUALITY
+  PROCESS_MATURITY
+}
+
+enum AssessmentStatus {
+  DRAFT
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum SOPStatus {
+  DRAFT
+  REVIEW
+  APPROVED
+  PUBLISHED
+  ARCHIVED
+}
+
+enum EntityType {
+  CUSTOMER
+  SUPPLIER
+  PRODUCT
+  CONTACT
+  EMPLOYEE
+}
+
+enum EntityStatus {
+  PENDING
+  REVIEW
+  MERGED
+  EXPORTED
+}
+
+// Advanced Intelligence Enums (T015)
+enum IndexStatus {
+  CREATING
+  ACTIVE
+  REINDEXING
+  ERROR
+}
+
+enum SourceType {
+  DOCUMENT
+  EMAIL
+  MESSAGE
+  MEETING
+}
+
+enum DecisionStatus {
+  DECISION_DRAFT
+  REVIEWED
+  DECISION_APPROVED
+}
+
+enum SopDraftStatus {
+  SOP_DRAFT
+  UNDER_REVIEW
+  SOP_APPROVED
+  SOP_PUBLISHED
+}
+
+enum OptimizationType {
+  PARALLELIZATION
+  ELIMINATION
+  AUTOMATION
+  REASSIGNMENT
+}
+
+enum SuggestionStatus {
+  SUGGESTION_PENDING
+  ACCEPTED
+  REJECTED
+  IMPLEMENTED
+}
+
+enum ModelStatus {
+  TRAINING
+  MODEL_ACTIVE
+  DEPRECATED
+}
+
+// -----------------------------------------------------------------------------
+// Organization & User Models
+// -----------------------------------------------------------------------------
+
+model Organization {
+  id            String   @id @default(cuid())
+  name          String
+  slug          String   @unique
+  industry      String?
+  employeeCount Int?
+  region        String   @default("DACH")
+  tier          Tier     @default(STARTER)
+  settings      Json     @default("{}")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  users         User[]
+  dataSources   DataSource[]
+  assessments   Assessment[]
+  sops          SOP[]
+  entityRecords EntityRecord[]
+  auditLogs     AuditLog[]
+
+  @@index([slug])
+  @@index([tier])
+}
+
+model User {
+  id             String   @id @default(cuid())
+  email          String   @unique
+  name           String?
+  role           Role     @default(VIEWER)
+  authProviderId String?  @unique
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  auditLogs AuditLog[]
+
+  @@index([organizationId])
+  @@index([email])
+}
+
+// -----------------------------------------------------------------------------
+// Data Source & Sync Models
+// -----------------------------------------------------------------------------
+
+model DataSource {
+  id             String           @id @default(cuid())
+  type           DataSourceType
+  name           String
+  status         DataSourceStatus @default(PENDING)
+  config         Json
+  syncSchedule   String?
+  lastSyncAt     DateTime?
+  lastSyncStatus SyncStatus?
+  deltaToken     String?
+  metadata       Json             @default("{}")
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  syncJobs SyncJob[]
+
+  @@index([organizationId])
+  @@index([type])
+  @@index([status])
+}
+
+model SyncJob {
+  id           String    @id @default(cuid())
+  status       JobStatus @default(PENDING)
+  startedAt    DateTime?
+  completedAt  DateTime?
+  eventsCount  Int       @default(0)
+  errorMessage String?
+  metadata     Json      @default("{}")
+  createdAt    DateTime  @default(now())
+
+  dataSourceId String
+  dataSource   DataSource @relation(fields: [dataSourceId], references: [id], onDelete: Cascade)
+
+  @@index([dataSourceId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+// -----------------------------------------------------------------------------
+// Assessment Model
+// -----------------------------------------------------------------------------
+
+model Assessment {
+  id              String           @id @default(cuid())
+  type            AssessmentType
+  status          AssessmentStatus @default(DRAFT)
+  overallScore    Float?
+  scores          Json?
+  findings        Json?
+  recommendations Json?
+  targetSystem    String?
+  generatedAt     DateTime?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([type])
+  @@index([status])
+}
+
+// -----------------------------------------------------------------------------
+// SOP (Standard Operating Procedure) Model
+// -----------------------------------------------------------------------------
+
+model SOP {
+  id           String    @id @default(cuid())
+  processId    String
+  title        String
+  version      Int       @default(1)
+  status       SOPStatus @default(DRAFT)
+  content      Json
+  confidence   Float?
+  editDistance Float?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  publishedAt  DateTime?
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([processId])
+  @@index([status])
+}
+
+// -----------------------------------------------------------------------------
+// Entity Record Model (Master Data Management)
+// -----------------------------------------------------------------------------
+
+model EntityRecord {
+  id               String       @id @default(cuid())
+  type             EntityType
+  status           EntityStatus @default(PENDING)
+  goldenRecord     Json
+  sourceRecords    Json
+  qualityScore     Float?
+  matchedRecordIds String[]
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([type])
+  @@index([status])
+}
+
+// -----------------------------------------------------------------------------
+// Audit Log Model
+// -----------------------------------------------------------------------------
+
+model AuditLog {
+  id           String   @id @default(cuid())
+  action       String
+  resourceType String
+  resourceId   String?
+  details      Json     @default("{}")
+  ipAddress    String?
+  userAgent    String?
+  createdAt    DateTime @default(now())
+
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, createdAt])
+  @@index([resourceType, resourceId])
+  @@index([userId])
+  @@index([action])
+}
+
+// -----------------------------------------------------------------------------
+// Advanced Intelligence Models
+// -----------------------------------------------------------------------------
+
+// T009: VectorIndex and Embedding models
+model VectorIndex {
+  id             String      @id @default(uuid())
+  name           String      @unique
+  embeddingModel String
+  dimensions     Int
+  documentCount  Int         @default(0)
+  status         IndexStatus @default(CREATING)
+  lastUpdatedAt  DateTime    @updatedAt
+  createdAt      DateTime    @default(now())
+
+  embeddings Embedding[]
+
+  @@index([status])
+}
+
+model Embedding {
+  id             String     @id @default(uuid())
+  vectorIndexId  String
+  sourceType     SourceType
+  sourceId       String
+  chunkIndex     Int
+  chunkHash      String
+  contentPreview String
+  metadata       Json?
+  tenantId       String
+  createdAt      DateTime   @default(now())
+
+  vectorIndex VectorIndex @relation(fields: [vectorIndexId], references: [id], onDelete: Cascade)
+
+  @@index([sourceId, chunkIndex])
+  @@index([tenantId])
+  @@index([vectorIndexId])
+}
+
+// T010: McpSession and McpAuditLog models
+model McpSession {
+  id               String   @id @default(uuid())
+  userId           String
+  clientName       String
+  clientVersion    String?
+  ipAddress        String
+  scopes           String[]
+  rateLimitBucket  Int      @default(1000)
+  rateLimitResetAt DateTime
+  lastActivityAt   DateTime
+  expiresAt        DateTime
+  createdAt        DateTime @default(now())
+
+  auditLogs McpAuditLog[]
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model McpAuditLog {
+  id           String   @id @default(uuid())
+  sessionId    String
+  userId       String
+  toolName     String
+  parameters   Json
+  responseSize Int
+  durationMs   Int
+  statusCode   Int
+  errorMessage String?
+  tenantId     String
+  createdAt    DateTime @default(now())
+
+  session McpSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([tenantId])
+  @@index([sessionId])
+}
+
+// T011: DecisionRecord model
+model DecisionRecord {
+  id               String         @id @default(uuid())
+  title            String
+  summary          String         @db.Text
+  decisionDate     DateTime?
+  outcome          String?
+  confidenceScore  Float
+  participants     Json
+  timeline         Json
+  factors          Json
+  sourceDocuments  String[]
+  relatedDecisions String[]
+  status           DecisionStatus @default(DECISION_DRAFT)
+  generatedBy      String
+  tenantId         String
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@index([tenantId])
+  @@index([status])
+  @@index([decisionDate])
+}
+
+// T012: SopDraft model
+model SopDraft {
+  id                String        @id @default(uuid())
+  processId         String
+  title             String
+  content           String        @db.Text
+  version           Int           @default(1)
+  confidenceScore   Float
+  stepCount         Int
+  observedInstances Int
+  variations        Json
+  raciMatrix        Json
+  status            SopDraftStatus @default(SOP_DRAFT)
+  reviewedBy        String?
+  approvedBy        String?
+  generatedBy       String
+  tenantId          String
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  @@index([processId])
+  @@index([tenantId])
+  @@index([status])
+}
+
+// T013: OptimizationSuggestion model
+model OptimizationSuggestion {
+  id               String           @id @default(uuid())
+  processId        String
+  type             OptimizationType
+  title            String
+  description      String           @db.Text
+  impactEstimate   Json
+  affectedSteps    String[]
+  prerequisites    String[]
+  risks            Json?
+  simulationResult Json?
+  status           SuggestionStatus @default(SUGGESTION_PENDING)
+  rejectionReason  String?
+  implementedAt    DateTime?
+  generatedBy      String
+  tenantId         String
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  @@index([processId])
+  @@index([tenantId])
+  @@index([status])
+}
+
+// T014: PredictionModel and Prediction models
+model PredictionModel {
+  id               String      @id @default(uuid())
+  processType      String
+  modelType        String
+  modelVersion     String
+  modelPath        String
+  features         String[]
+  metrics          Json
+  trainingDataSize Int
+  status           ModelStatus @default(TRAINING)
+  lastTrainedAt    DateTime
+  tenantId         String
+  createdAt        DateTime    @default(now())
+
+  predictions Prediction[]
+
+  @@index([processType])
+  @@index([tenantId])
+  @@index([status])
+}
+
+model Prediction {
+  id                 String          @id @default(uuid())
+  modelId            String
+  processInstanceId  String
+  predictedValue     Float
+  confidenceInterval Json
+  actualValue        Float?
+  features           Json
+  accuracy           Float?
+  tenantId           String
+  createdAt          DateTime        @default(now())
+
+  model PredictionModel @relation(fields: [modelId], references: [id], onDelete: Cascade)
+
+  @@index([processInstanceId])
+  @@index([tenantId])
+  @@index([modelId])
+}
+
+// -----------------------------------------------------------------------------
+// OPERATE Tier Models (002-operate-tier)
+// -----------------------------------------------------------------------------
+
+// T001: RoutingRule model
+model RoutingRule {
+  id               String   @id @default(uuid())
+  name             String
+  description      String?
+  priority         Int      @default(100)
+  isActive         Boolean  @default(true)
+  criteria         Json     // RequestCriteria: categories, keywords, senders, urgency
+  handler          Json     // RouteHandler: personId, teamId, escalationPath
+  fallbackHandler  Json?    // Backup handler if primary unavailable
+  workloadLimit    Int?     // Max workload before routing elsewhere
+  createdBy        String
+  organizationId   String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  decisions RoutingDecision[]
+
+  @@index([organizationId])
+  @@index([isActive])
+  @@index([priority])
+}
+
+// T002: RoutingDecision model
+model RoutingDecision {
+  id              String   @id @default(uuid())
+  requestId       String   @unique
+  requestType     String
+  requestContent  String   @db.Text
+  categories      String[]
+  urgencyScore    Float
+  handlerId       String   // Person who received the request
+  handlerType     String   // 'person' | 'team' | 'queue'
+  ruleId          String?
+  confidence      Float
+  reasoning       String   @db.Text
+  alternativeHandlers Json?
+  responseTime    Int?     // milliseconds
+  wasEscalated    Boolean  @default(false)
+  wasRerouted     Boolean  @default(false)
+  feedbackScore   Int?     // 1-5 rating
+  feedbackComment String?
+  organizationId  String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  rule RoutingRule? @relation(fields: [ruleId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([handlerId])
+  @@index([createdAt])
+  @@index([ruleId])
+}
+
+// T003: ExpertiseProfile model
+model ExpertiseProfile {
+  id              String   @id @default(uuid())
+  personId        String   @unique
+  personName      String
+  skills          Json     // Array of { skill, level, confidence, lastDemonstrated }
+  domains         String[]
+  languages       String[]
+  certifications  Json?
+  processExpertise Json    // { processId, proficiencyLevel, instances }
+  responseMetrics Json     // { avgResponseTime, satisfactionScore, volumeHandled }
+  availability    Json     // { schedule, timezone, currentWorkload }
+  lastUpdatedFrom String   // Source of last update
+  organizationId  String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([personId])
+}
+
+// T004: ConversationSession model
+model ConversationSession {
+  id              String   @id @default(uuid())
+  userId          String
+  title           String?
+  context         Json     // Conversation context and history summary
+  lastActivityAt  DateTime
+  messageCount    Int      @default(0)
+  tokensUsed      Int      @default(0)
+  organizationId  String
+  createdAt       DateTime @default(now())
+  expiresAt       DateTime
+
+  messages ConversationMessage[]
+
+  @@index([userId])
+  @@index([organizationId])
+  @@index([lastActivityAt])
+}
+
+// T005: ConversationMessage model
+model ConversationMessage {
+  id           String   @id @default(uuid())
+  sessionId    String
+  role         String   // 'user' | 'assistant' | 'system'
+  content      String   @db.Text
+  citations    Json?    // Array of source citations
+  toolCalls    Json?    // Any tool calls made
+  tokensInput  Int
+  tokensOutput Int
+  latencyMs    Int
+  createdAt    DateTime @default(now())
+
+  session ConversationSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@index([createdAt])
+}
+
+// T006: AutomatedAction model
+model AutomatedAction {
+  id                String   @id @default(uuid())
+  name              String
+  description       String?
+  triggerType       String   // 'pattern' | 'threshold' | 'schedule' | 'event'
+  triggerConfig     Json     // Pattern/threshold/schedule configuration
+  actionType        String   // 'reminder' | 'escalation' | 'retry' | 'redistribute' | 'notify'
+  actionConfig      Json     // Action-specific configuration
+  requiresApproval  Boolean  @default(false)
+  approvalRoles     String[]
+  isActive          Boolean  @default(true)
+  successCount      Int      @default(0)
+  failureCount      Int      @default(0)
+  lastTriggeredAt   DateTime?
+  organizationId    String
+  createdBy         String
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  executions ActionExecution[]
+
+  @@index([organizationId])
+  @@index([isActive])
+  @@index([triggerType])
+}
+
+// T007: ActionExecution model
+model ActionExecution {
+  id              String    @id @default(uuid())
+  actionId        String
+  triggerReason   String    @db.Text
+  status          String    // 'pending_approval' | 'approved' | 'executing' | 'completed' | 'failed' | 'rolled_back'
+  approvedBy      String?
+  approvedAt      DateTime?
+  executedAt      DateTime?
+  completedAt     DateTime?
+  result          Json?
+  errorMessage    String?
+  rollbackData    Json?     // Data needed to rollback
+  wasRolledBack   Boolean   @default(false)
+  rolledBackAt    DateTime?
+  rolledBackBy    String?
+  organizationId  String
+  createdAt       DateTime  @default(now())
+
+  action AutomatedAction @relation(fields: [actionId], references: [id], onDelete: Cascade)
+
+  @@index([actionId])
+  @@index([organizationId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+// T008: ComplianceRule model
+model ComplianceRule {
+  id              String   @id @default(uuid())
+  name            String
+  description     String   @db.Text
+  framework       String   // 'GDPR' | 'SOX' | 'ISO27001' | 'custom'
+  category        String   // 'data_retention' | 'access_control' | 'process_compliance' | etc.
+  ruleLogic       Json     // Rule evaluation logic
+  severity        String   // 'critical' | 'high' | 'medium' | 'low'
+  checkFrequency  String   // 'realtime' | 'hourly' | 'daily' | 'weekly'
+  isActive        Boolean  @default(true)
+  lastCheckedAt   DateTime?
+  passCount       Int      @default(0)
+  failCount       Int      @default(0)
+  organizationId  String
+  createdBy       String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  evidence   ComplianceEvidence[]
+  violations ComplianceViolation[]
+
+  @@index([organizationId])
+  @@index([framework])
+  @@index([isActive])
+}
+
+// T009: ComplianceEvidence model
+model ComplianceEvidence {
+  id              String   @id @default(uuid())
+  ruleId          String
+  evidenceType    String   // 'access_log' | 'process_execution' | 'document' | 'approval'
+  sourceId        String
+  sourceType      String
+  description     String
+  metadata        Json?
+  collectedAt     DateTime @default(now())
+  expiresAt       DateTime?
+  organizationId  String
+
+  rule ComplianceRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+
+  @@index([ruleId])
+  @@index([organizationId])
+  @@index([evidenceType])
+  @@index([collectedAt])
+}
+
+// T010: ComplianceViolation model
+model ComplianceViolation {
+  id              String    @id @default(uuid())
+  ruleId          String
+  severity        String
+  description     String    @db.Text
+  affectedEntity  String
+  affectedEntityId String?
+  evidenceIds     String[]
+  status          String    // 'open' | 'acknowledged' | 'remediated' | 'accepted_risk'
+  assignedTo      String?
+  resolvedBy      String?
+  resolvedAt      DateTime?
+  resolutionNotes String?
+  dueDate         DateTime?
+  organizationId  String
+  detectedAt      DateTime  @default(now())
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  rule ComplianceRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+
+  @@index([ruleId])
+  @@index([organizationId])
+  @@index([status])
+  @@index([severity])
+  @@index([detectedAt])
+}
+
+// T011: DashboardWidget model
+model DashboardWidget {
+  id              String   @id @default(uuid())
+  dashboardId     String   // Groups widgets together
+  userId          String
+  widgetType      String   // 'metric' | 'chart' | 'alert_list' | 'process_health' | etc.
+  title           String
+  config          Json     // Widget-specific configuration
+  position        Json     // { x, y, width, height }
+  refreshInterval Int      @default(60) // seconds
+  isVisible       Boolean  @default(true)
+  organizationId  String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([dashboardId])
+  @@index([userId])
+  @@index([organizationId])
+}
+
+// Enrichment Job tracking (from 001-enterprise-ai-foundation Phase 16)
+model EnrichmentJob {
+  id              String   @id @default(cuid())
+  organizationId  String
+  jobType         String
+  totalEntities   Int
+  enrichedCount   Int      @default(0)
+  failedCount     Int      @default(0)
+  skippedCount    Int      @default(0)
+  duration        Int?     // milliseconds
+  requestedBy     String
+  status          String   // 'completed' | 'partial' | 'failed'
+  startedAt       DateTime
+  completedAt     DateTime?
+  createdAt       DateTime @default(now())
+
+  @@index([organizationId])
+  @@index([status])
+  @@index([createdAt])
+}
