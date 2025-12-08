@@ -3,7 +3,8 @@
  * Core service for decision archaeology and analysis
  */
 
-import { PrismaClient, DecisionStatus } from '@prisma/client';
+import { DecisionStatus } from '@prisma/client';
+import { prisma } from '../../lib/prisma.js';
 import { logger } from '../../lib/logger.js';
 import { getAnthropicClient } from '../../lib/anthropic.js';
 import { getEmbeddingService } from '../vector/embedding.service.js';
@@ -18,8 +19,6 @@ import type {
   DecisionTimelineEntry,
   DecisionAlternative,
 } from '../../models/DecisionRecord.js';
-
-const prisma = new PrismaClient();
 
 /**
  * Decision archaeology service

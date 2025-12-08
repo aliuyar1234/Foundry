@@ -4,12 +4,10 @@
  */
 
 import { Queue, Worker, Job } from 'bullmq';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
 import { getDecisionService } from '../services/decision/decision.service.js';
 import { getRedisConnection } from '../lib/redis.js';
-
-const prisma = new PrismaClient();
 
 interface DecisionExtractionJobData {
   eventId?: string;

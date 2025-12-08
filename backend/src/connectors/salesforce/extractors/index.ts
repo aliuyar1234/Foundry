@@ -14,6 +14,10 @@ import {
   SalesforceClient,
 } from '../salesforceClient.js';
 
+// Re-export specialized extractors
+export * from './opportunities.js';
+export * from './activities.js';
+
 export interface ExtractedEvent {
   externalId: string;
   source: string;

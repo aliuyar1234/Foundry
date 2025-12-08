@@ -5,7 +5,7 @@
  * Monitors workload signals and generates proactive alerts
  */
 
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../../lib/prisma.js';
 import { EventEmitter } from 'events';
 
 // =============================================================================
@@ -77,8 +77,6 @@ export interface TeamWarningsSummary {
 // =============================================================================
 // Early Warning System
 // =============================================================================
-
-const prisma = new PrismaClient();
 
 // Warning thresholds by sensitivity
 const THRESHOLDS = {

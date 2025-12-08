@@ -63,9 +63,165 @@ dump.rdb
 pgdata/
 nul
 
-# Claude Code / Internal docs
+# =============================================================================
+# INTERNAL FILES (Claude Code / Codex review workspace)
+# =============================================================================
+
+# Claude Code configuration and commands
 .claude/
+
+# Speckit workflow templates and memory
 .specify/
+
+# Claude development guidelines
 CLAUDE.md
+
+# Feature specifications (internal planning docs)
 specs/
+
+# Milestone completion markers
 ENTERPRISE_AI_FOUNDATION_COMPLETE.md
+CONNECTOR_HOOKS_IMPLEMENTATION.md
+*_IMPLEMENTATION.md
+*_COMPLETE.md
+
+# Security audit review workspace
+review/
+
+# Review context documentation
+REVIEW_CONTEXT.md
+**/REVIEW_CONTEXT.md
+
+# Internal planning and task files
+**/tasks.md
+**/plan.md
+**/spec.md
+**/research.md
+**/data-model.md
+**/quickstart.md
+**/checklists/
+
+# Codex prompts and responses
+codex-*.md
+CODEX_*.md
+*-codex.md
+*-review.md
+
+# Session transcripts
+session-*.md
+transcript-*.md
+
+# Internal notes
+NOTES.md
+TODO.md
+INTERNAL.md
+SCRATCH.md
+*.scratch.md
+*.notes.md
+*.internal.md
+
+# AI conversation logs
+.aider*
+.cursor/
+.continue/
+copilot-*.md
+
+# Package lock files (regenerate with npm i)
+package-lock.json
+
+# Vitest
+vitest.config.ts.timestamp*
+
+# Turbo
+.turbo/
+
+# Parcel
+.parcel-cache/
+
+# Debug
+.pnpm-debug.log*
+lerna-debug.log*
+
+# Optional npm cache
+.npm/
+
+# Optional eslint cache
+.eslintcache
+
+# Optional stylelint cache
+.stylelintcache
+
+# Microbundle cache
+.rpt2_cache/
+.rts2_cache_cjs/
+.rts2_cache_es/
+.rts2_cache_umd/
+
+# Playwright
+playwright-report/
+playwright/.cache/
+test-results/
+
+# Storybook
+storybook-static/
+
+# Local development
+*.local
+.env.development
+.env.test
+.env.production
+
+# Certificates (if any local dev certs)
+*.pem
+*.key
+*.crt
+!*.example.pem
+
+# Secrets / credentials
+*.credentials
+secrets/
+.secrets/
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# Editor directories
+.history/
+
+# JetBrains
+*.iml
+*.ipr
+*.iws
+
+# Serverless
+.serverless/
+
+# FuseBox
+.fusebox/
+
+# DynamoDB Local
+.dynamodb/
+
+# TernJS
+.tern-port
+
+# yarn
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+.pnp.*
+yarn.lock
+
+# macOS
+*.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk

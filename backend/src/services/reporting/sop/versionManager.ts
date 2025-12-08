@@ -3,7 +3,8 @@
  * Manages SOP versioning, diffs, and version history
  */
 
-import { PrismaClient, SOPVersion } from '@prisma/client';
+import { SOPVersion } from '@prisma/client';
+import { prisma } from '../../../lib/prisma.js';
 import * as diff from 'diff';
 
 export interface VersionComparison {
@@ -46,22 +47,22 @@ export interface BranchInfo {
 }
 
 export class VersionManager {
-  private prisma: PrismaClient;
+  constructor() {}
 
-  constructor(prisma?: PrismaClient) {
-    this.prisma = prisma || new PrismaClient();
+  private get db() {
+    return prisma;
   }
 
   /**
    * Get version history for an SOP
    */
   async getVersionHistory(sopId: string): Promise<VersionHistoryEntry[]> {
-    const sop = await this.prisma.sOP.findUnique({
+    const sop = await this.db.sOP.findUnique({
       where: { id: sopId },
       select: { version: true },
     });
 
-    const versions = await this.prisma.sOPVersion.findMany({
+    const versions = await this.db.sOPVersion.findMany({
       where: { sopId },
       orderBy: { createdAt: 'desc' },
     });
@@ -86,8 +87,8 @@ export class VersionManager {
     toVersionId: string
   ): Promise<VersionComparison> {
     const [fromVersion, toVersion] = await Promise.all([
-      this.prisma.sOPVersion.findUnique({ where: { id: fromVersionId } }),
-      this.prisma.sOPVersion.findUnique({ where: { id: toVersionId } }),
+      this.db.sOPVersion.findUnique({ where: { id: fromVersionId } }),
+      this.db.sOPVersion.findUnique({ where: { id: toVersionId } }),
     ]);
 
     if (!fromVersion || !toVersion) {
@@ -171,7 +172,7 @@ export class VersionManager {
    * Compare current version with a previous version
    */
   async compareWithCurrent(sopId: string, versionId: string): Promise<VersionComparison> {
-    const sop = await this.prisma.sOP.findUnique({
+    const sop = await this.db.sOP.findUnique({
       where: { id: sopId },
     });
 
@@ -179,7 +180,7 @@ export class VersionManager {
       throw new Error('SOP not found');
     }
 
-    const currentVersion = await this.prisma.sOPVersion.findFirst({
+    const currentVersion = await this.db.sOPVersion.findFirst({
       where: { sopId, version: sop.version },
     });
 
@@ -194,7 +195,7 @@ export class VersionManager {
    * Get diff between consecutive versions
    */
   async getVersionDiff(sopId: string, versionId: string): Promise<VersionComparison | null> {
-    const version = await this.prisma.sOPVersion.findUnique({
+    const version = await this.db.sOPVersion.findUnique({
       where: { id: versionId },
     });
 
@@ -203,7 +204,7 @@ export class VersionManager {
     }
 
     // Find previous version
-    const previousVersion = await this.prisma.sOPVersion.findFirst({
+    const previousVersion = await this.db.sOPVersion.findFirst({
       where: {
         sopId,
         createdAt: { lt: version.createdAt },
@@ -227,7 +228,7 @@ export class VersionManager {
     tag: string,
     taggedBy: string
   ): Promise<void> {
-    const version = await this.prisma.sOPVersion.findUnique({
+    const version = await this.db.sOPVersion.findUnique({
       where: { id: versionId },
     });
 
@@ -236,7 +237,7 @@ export class VersionManager {
     }
 
     // Store tag in metadata
-    await this.prisma.sOPVersion.update({
+    await this.db.sOPVersion.update({
       where: { id: versionId },
       data: {
         changeNotes: version.changeNotes
@@ -250,7 +251,7 @@ export class VersionManager {
    * Find versions by tag
    */
   async findVersionsByTag(sopId: string, tag: string): Promise<SOPVersion[]> {
-    return this.prisma.sOPVersion.findMany({
+    return this.db.sOPVersion.findMany({
       where: {
         sopId,
         changeNotes: { contains: `[Tag: ${tag}]` },
@@ -263,7 +264,7 @@ export class VersionManager {
    * Get version count
    */
   async getVersionCount(sopId: string): Promise<number> {
-    return this.prisma.sOPVersion.count({
+    return this.db.sOPVersion.count({
       where: { sopId },
     });
   }
@@ -272,7 +273,7 @@ export class VersionManager {
    * Cleanup old versions (keep last N versions)
    */
   async cleanupOldVersions(sopId: string, keepCount: number = 10): Promise<number> {
-    const versions = await this.prisma.sOPVersion.findMany({
+    const versions = await this.db.sOPVersion.findMany({
       where: { sopId },
       orderBy: { createdAt: 'desc' },
       skip: keepCount,
@@ -284,7 +285,7 @@ export class VersionManager {
 
     const deleteIds = versions.map((v) => v.id);
 
-    await this.prisma.sOPVersion.deleteMany({
+    await this.db.sOPVersion.deleteMany({
       where: { id: { in: deleteIds } },
     });
 

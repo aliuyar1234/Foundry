@@ -300,3 +300,10 @@ export class DatevConnector extends BaseConnector {
 // Export types and utilities
 export * from './datevClient.js';
 export * from './extractors/index.js';
+
+// Export additional modules
+export * from './skrChartOfAccounts.js';
+export * from './elsterIntegration.js';
+export * from './financialReports.js';
+export * from './incrementalSync.js';
+export * from './eventNormalizer.js';

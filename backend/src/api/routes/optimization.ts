@@ -1,12 +1,88 @@
 /**
  * Optimization API Routes (T098-T101)
  * Endpoints for process optimization
+ *
+ * SECURITY: All routes require authentication (applied globally in routes/index.ts)
+ * SECURITY: RBAC permission checks applied per-endpoint
+ * SECURITY: Input validation via Fastify JSON Schema
  */
 
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { getOptimizationService } from '../../services/optimization/optimization.service.js';
 import { logger } from '../../lib/logger.js';
 import type { OptimizationType, SuggestionStatus } from '@prisma/client';
+import { getOrganizationId } from '../middleware/organization.js';
+import { requirePermission } from '../middleware/permissions.js';
+
+// =============================================================================
+// Validation Schemas (Fastify JSON Schema)
+// =============================================================================
+
+const optimizationTypeEnum = ['BOTTLENECK', 'AUTOMATION', 'RESOURCE', 'WORKFLOW', 'COMPLIANCE', 'QUALITY'];
+const suggestionStatusEnum = ['PENDING', 'APPROVED', 'REJECTED', 'IMPLEMENTED', 'ARCHIVED'];
+
+const detectOptimizationsSchema = {
+  type: 'object',
+  required: ['processId'],
+  properties: {
+    processId: { type: 'string', minLength: 1, maxLength: 100 },
+    options: {
+      type: 'object',
+      properties: {
+        types: { type: 'array', items: { type: 'string', enum: optimizationTypeEnum }, maxItems: 10 },
+        minConfidence: { type: 'number', minimum: 0, maximum: 1 },
+        includeImplementationPlan: { type: 'boolean' },
+        customCriteria: { type: 'string', maxLength: 2000 },
+      },
+      additionalProperties: false,
+    },
+  },
+  additionalProperties: false,
+} as const;
+
+const updateSuggestionSchema = {
+  type: 'object',
+  properties: {
+    status: { type: 'string', enum: suggestionStatusEnum },
+    title: { type: 'string', minLength: 1, maxLength: 500 },
+    description: { type: 'string', maxLength: 5000 },
+    priority: { type: 'integer', minimum: 1, maximum: 10 },
+  },
+  additionalProperties: false,
+} as const;
+
+const idParamSchema = {
+  type: 'object',
+  required: ['id'],
+  properties: {
+    id: { type: 'string', minLength: 1, maxLength: 100 },
+  },
+} as const;
+
+const processIdParamSchema = {
+  type: 'object',
+  required: ['processId'],
+  properties: {
+    processId: { type: 'string', minLength: 1, maxLength: 100 },
+  },
+} as const;
+
+const queryOptimizationsSchema = {
+  type: 'object',
+  properties: {
+    processId: { type: 'string', maxLength: 100 },
+    type: { type: 'string', enum: optimizationTypeEnum },
+    status: { type: 'string', enum: suggestionStatusEnum },
+    minPriority: { type: 'string', pattern: '^[0-9]+$' },
+    minConfidence: { type: 'string', pattern: '^[0-9]+(\\.[0-9]+)?$' },
+    limit: { type: 'string', pattern: '^[0-9]+$' },
+    offset: { type: 'string', pattern: '^[0-9]+$' },
+  },
+} as const;
+
+// =============================================================================
+// Request body types (for TypeScript)
+// =============================================================================
 
 /**
  * Request body types
@@ -47,15 +123,20 @@ export async function optimizationRoutes(fastify: FastifyInstance): Promise<void
   /**
    * Detect optimization opportunities
    * POST /api/v1/optimization/detect
+   * Requires: process.update permission (ANALYST role minimum)
    */
   fastify.post(
     '/detect',
+    {
+      schema: { body: detectOptimizationsSchema },
+      preHandler: [requirePermission('process', 'update')],
+    },
     async (
       request: FastifyRequest<{ Body: DetectOptimizationsBody }>,
       reply: FastifyReply
     ) => {
       try {
-        const tenantId = (request as any).tenantId || 'default';
+        const tenantId = getOrganizationId(request);
         const { processId, options } = request.body;
 
         const suggestions = await optimizationService.detectOptimizations({
@@ -81,15 +162,20 @@ export async function optimizationRoutes(fastify: FastifyInstance): Promise<void
   /**
    * Query optimization suggestions
    * GET /api/v1/optimization
+   * Requires: process.read permission (VIEWER role minimum)
    */
   fastify.get(
     '/',
+    {
+      schema: { querystring: queryOptimizationsSchema },
+      preHandler: [requirePermission('process', 'read')],
+    },
     async (
       request: FastifyRequest<{ Querystring: QueryOptimizationsQuery }>,
       reply: FastifyReply
     ) => {
       try {
-        const tenantId = (request as any).tenantId || 'default';
+        const tenantId = getOrganizationId(request);
         const query = request.query;
 
         const { suggestions, total } = await optimizationService.querySuggestions(
@@ -126,9 +212,14 @@ export async function optimizationRoutes(fastify: FastifyInstance): Promise<void
   /**
    * Get suggestion by ID
    * GET /api/v1/optimization/:id
+   * Requires: process.read permission (VIEWER role minimum)
    */
   fastify.get(
     '/:id',
+    {
+      schema: { params: idParamSchema },
+      preHandler: [requirePermission('process', 'read')],
+    },
     async (
       request: FastifyRequest<{ Params: { id: string } }>,
       reply: FastifyReply
@@ -161,9 +252,14 @@ export async function optimizationRoutes(fastify: FastifyInstance): Promise<void
   /**
    * Update suggestion
    * PATCH /api/v1/optimization/:id
+   * Requires: process.update permission (ANALYST role minimum)
    */
   fastify.patch(
     '/:id',
+    {
+      schema: { params: idParamSchema, body: updateSuggestionSchema },
+      preHandler: [requirePermission('process', 'update')],
+    },
     async (
       request: FastifyRequest<{ Params: { id: string }; Body: UpdateSuggestionBody }>,
       reply: FastifyReply
@@ -196,9 +292,14 @@ export async function optimizationRoutes(fastify: FastifyInstance): Promise<void
   /**
    * Approve suggestion
    * POST /api/v1/optimization/:id/approve
+   * Requires: process.update permission (ANALYST role minimum)
    */
   fastify.post(
     '/:id/approve',
+    {
+      schema: { params: idParamSchema },
+      preHandler: [requirePermission('process', 'update')],
+    },
     async (
       request: FastifyRequest<{ Params: { id: string } }>,
       reply: FastifyReply
@@ -233,9 +334,14 @@ export async function optimizationRoutes(fastify: FastifyInstance): Promise<void
   /**
    * Reject suggestion
    * POST /api/v1/optimization/:id/reject
+   * Requires: process.update permission (ANALYST role minimum)
    */
   fastify.post(
     '/:id/reject',
+    {
+      schema: { params: idParamSchema },
+      preHandler: [requirePermission('process', 'update')],
+    },
     async (
       request: FastifyRequest<{ Params: { id: string } }>,
       reply: FastifyReply
@@ -270,9 +376,14 @@ export async function optimizationRoutes(fastify: FastifyInstance): Promise<void
   /**
    * Mark suggestion as implemented
    * POST /api/v1/optimization/:id/implement
+   * Requires: process.update permission (ANALYST role minimum)
    */
   fastify.post(
     '/:id/implement',
+    {
+      schema: { params: idParamSchema },
+      preHandler: [requirePermission('process', 'update')],
+    },
     async (
       request: FastifyRequest<{ Params: { id: string } }>,
       reply: FastifyReply
@@ -305,15 +416,20 @@ export async function optimizationRoutes(fastify: FastifyInstance): Promise<void
   /**
    * Get optimization summary for a process
    * GET /api/v1/optimization/process/:processId/summary
+   * Requires: process.read permission (VIEWER role minimum)
    */
   fastify.get(
     '/process/:processId/summary',
+    {
+      schema: { params: processIdParamSchema },
+      preHandler: [requirePermission('process', 'read')],
+    },
     async (
       request: FastifyRequest<{ Params: { processId: string } }>,
       reply: FastifyReply
     ) => {
       try {
-        const tenantId = (request as any).tenantId || 'default';
+        const tenantId = getOrganizationId(request);
         const { processId } = request.params;
 
         const { suggestions } = await optimizationService.querySuggestions({

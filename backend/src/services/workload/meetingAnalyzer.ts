@@ -5,7 +5,7 @@
  * Provides insights into meeting efficiency and suggestions for improvement
  */
 
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../../lib/prisma.js';
 import { getCalendarEvents, CalendarEvent, getMeetingStats } from './calendarIntegration.js';
 
 // =============================================================================
@@ -123,8 +123,6 @@ export interface MeetingCultureScore {
 // =============================================================================
 // Meeting Analyzer
 // =============================================================================
-
-const prisma = new PrismaClient();
 
 // Efficiency weights
 const EFFICIENCY_WEIGHTS = {

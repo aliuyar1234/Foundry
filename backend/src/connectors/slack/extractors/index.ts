@@ -217,3 +217,9 @@ export async function extractAllSlackData(
 
   return { events, stats };
 }
+
+// Re-export specialized extractors
+export * from './threads.js';
+export * from './reactions.js';
+export * from './files.js';
+export * from './membership.js';

@@ -3,7 +3,8 @@
  * Predictive process analytics service
  */
 
-import { PrismaClient, ModelStatus } from '@prisma/client';
+import { ModelStatus } from '@prisma/client';
+import { prisma } from '../../lib/prisma.js';
 import { logger } from '../../lib/logger.js';
 import { getAnthropicClient } from '../../lib/anthropic.js';
 import type {
@@ -25,8 +26,6 @@ import type {
   ModelMetrics,
   TrainingDataInfo,
 } from '../../models/Prediction.js';
-
-const prisma = new PrismaClient();
 
 /**
  * Predictive analytics service

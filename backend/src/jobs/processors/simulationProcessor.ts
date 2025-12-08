@@ -4,7 +4,7 @@
  */
 
 import { Job } from 'bullmq';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../../lib/prisma.js';
 import { PersonnelSimulator, type PersonnelChange } from '../../services/simulation/personnelSimulator';
 import { ProcessSimulator, type ProcessChange } from '../../services/simulation/processSimulator';
 import { OrgStructureSimulator, type OrgStructureChange } from '../../services/simulation/orgStructureSimulator';
@@ -12,8 +12,6 @@ import { ImpactQuantifier } from '../../services/simulation/impactQuantifier';
 import { MitigationRecommender } from '../../services/simulation/mitigationRecommender';
 import { auditService } from '../../services/audit/auditService';
 import { logger } from '../../lib/logger';
-
-const prisma = new PrismaClient();
 
 export type SimulationType = 'personnel' | 'process' | 'organization' | 'combined';
 

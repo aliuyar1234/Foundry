@@ -1,12 +1,148 @@
 /**
  * Decision API Routes (T067-T070)
  * Endpoints for decision archaeology
+ *
+ * SECURITY: All routes require authentication (applied globally in routes/index.ts)
+ * SECURITY: RBAC permission checks applied per-endpoint
+ * SECURITY: Input validation via Fastify JSON Schema
  */
 
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { getDecisionService } from '../../services/decision/decision.service.js';
 import { logger } from '../../lib/logger.js';
 import type { DecisionStatus } from '@prisma/client';
+import { getOrganizationId } from '../middleware/organization.js';
+import { requirePermission } from '../middleware/permissions.js';
+
+// =============================================================================
+// Validation Schemas (Fastify JSON Schema)
+// =============================================================================
+
+const decisionStatusEnum = ['DRAFT', 'PROPOSED', 'APPROVED', 'REJECTED', 'IMPLEMENTED', 'DEPRECATED'];
+
+const createDecisionSchema = {
+  type: 'object',
+  required: ['title', 'description', 'sourceType'],
+  properties: {
+    title: { type: 'string', minLength: 1, maxLength: 500 },
+    description: { type: 'string', minLength: 1, maxLength: 10000 },
+    context: { type: 'string', maxLength: 10000 },
+    alternatives: {
+      type: 'array',
+      maxItems: 20,
+      items: {
+        type: 'object',
+        required: ['title', 'description', 'pros', 'cons', 'wasChosen'],
+        properties: {
+          title: { type: 'string', minLength: 1, maxLength: 500 },
+          description: { type: 'string', maxLength: 5000 },
+          pros: { type: 'array', items: { type: 'string', maxLength: 1000 }, maxItems: 20 },
+          cons: { type: 'array', items: { type: 'string', maxLength: 1000 }, maxItems: 20 },
+          wasChosen: { type: 'boolean' },
+        },
+        additionalProperties: false,
+      },
+    },
+    outcome: { type: 'string', maxLength: 10000 },
+    rationale: { type: 'string', maxLength: 10000 },
+    status: { type: 'string', enum: decisionStatusEnum },
+    confidence: { type: 'number', minimum: 0, maximum: 1 },
+    sourceType: { type: 'string', minLength: 1, maxLength: 100 },
+    sourceId: { type: 'string', maxLength: 100 },
+    decisionMakers: { type: 'array', items: { type: 'string', maxLength: 100 }, maxItems: 50 },
+    stakeholders: { type: 'array', items: { type: 'string', maxLength: 100 }, maxItems: 100 },
+    impactAreas: { type: 'array', items: { type: 'string', maxLength: 100 }, maxItems: 50 },
+    tags: { type: 'array', items: { type: 'string', maxLength: 50 }, maxItems: 50 },
+    decisionDate: { type: 'string', format: 'date-time' },
+    effectiveDate: { type: 'string', format: 'date-time' },
+    reviewDate: { type: 'string', format: 'date-time' },
+  },
+  additionalProperties: false,
+} as const;
+
+const updateDecisionSchema = {
+  type: 'object',
+  properties: {
+    title: { type: 'string', minLength: 1, maxLength: 500 },
+    description: { type: 'string', minLength: 1, maxLength: 10000 },
+    context: { type: 'string', maxLength: 10000 },
+    outcome: { type: 'string', maxLength: 10000 },
+    rationale: { type: 'string', maxLength: 10000 },
+    status: { type: 'string', enum: decisionStatusEnum },
+    confidence: { type: 'number', minimum: 0, maximum: 1 },
+    decisionMakers: { type: 'array', items: { type: 'string', maxLength: 100 }, maxItems: 50 },
+    stakeholders: { type: 'array', items: { type: 'string', maxLength: 100 }, maxItems: 100 },
+    impactAreas: { type: 'array', items: { type: 'string', maxLength: 100 }, maxItems: 50 },
+    tags: { type: 'array', items: { type: 'string', maxLength: 50 }, maxItems: 50 },
+  },
+  additionalProperties: false,
+} as const;
+
+const extractDecisionsSchema = {
+  type: 'object',
+  required: ['text', 'sourceType'],
+  properties: {
+    text: { type: 'string', minLength: 1, maxLength: 100000 },
+    sourceType: { type: 'string', minLength: 1, maxLength: 100 },
+    sourceId: { type: 'string', maxLength: 100 },
+    autoCreate: { type: 'boolean', default: false },
+  },
+  additionalProperties: false,
+} as const;
+
+const rejectDecisionSchema = {
+  type: 'object',
+  required: ['reason'],
+  properties: {
+    reason: { type: 'string', minLength: 1, maxLength: 5000 },
+  },
+  additionalProperties: false,
+} as const;
+
+const idParamSchema = {
+  type: 'object',
+  required: ['id'],
+  properties: {
+    id: { type: 'string', minLength: 1, maxLength: 100 },
+  },
+} as const;
+
+const queryDecisionsSchema = {
+  type: 'object',
+  properties: {
+    status: { type: 'string', enum: decisionStatusEnum },
+    sourceType: { type: 'string', maxLength: 100 },
+    decisionMaker: { type: 'string', maxLength: 100 },
+    impactArea: { type: 'string', maxLength: 100 },
+    tag: { type: 'string', maxLength: 50 },
+    minConfidence: { type: 'string', pattern: '^[0-9]+(\\.[0-9]+)?$' },
+    startDate: { type: 'string', format: 'date-time' },
+    endDate: { type: 'string', format: 'date-time' },
+    searchText: { type: 'string', maxLength: 500 },
+    limit: { type: 'string', pattern: '^[0-9]+$' },
+    offset: { type: 'string', pattern: '^[0-9]+$' },
+  },
+} as const;
+
+const timelineQuerySchema = {
+  type: 'object',
+  properties: {
+    startDate: { type: 'string', format: 'date-time' },
+    endDate: { type: 'string', format: 'date-time' },
+    limit: { type: 'string', pattern: '^[0-9]+$' },
+  },
+} as const;
+
+const relatedQuerySchema = {
+  type: 'object',
+  properties: {
+    limit: { type: 'string', pattern: '^[0-9]+$' },
+  },
+} as const;
+
+// =============================================================================
+// Request body types (for TypeScript)
+// =============================================================================
 
 /**
  * Request body types
@@ -81,12 +217,17 @@ export async function decisionRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * Create a new decision
    * POST /api/v1/decisions
+   * Requires: process.update permission (ANALYST role minimum)
    */
   fastify.post(
     '/',
+    {
+      schema: { body: createDecisionSchema },
+      preHandler: [requirePermission('process', 'update')],
+    },
     async (request: FastifyRequest<{ Body: CreateDecisionBody }>, reply: FastifyReply) => {
       try {
-        const tenantId = (request as any).tenantId || 'default';
+        const tenantId = getOrganizationId(request);
         const body = request.body;
 
         const decision = await decisionService.createDecision({
@@ -130,15 +271,20 @@ export async function decisionRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * Query decisions
    * GET /api/v1/decisions
+   * Requires: process.read permission (VIEWER role minimum)
    */
   fastify.get(
     '/',
+    {
+      schema: { querystring: queryDecisionsSchema },
+      preHandler: [requirePermission('process', 'read')],
+    },
     async (
       request: FastifyRequest<{ Querystring: QueryDecisionsQuery }>,
       reply: FastifyReply
     ) => {
       try {
-        const tenantId = (request as any).tenantId || 'default';
+        const tenantId = getOrganizationId(request);
         const query = request.query;
 
         const { decisions, total } = await decisionService.queryDecisions(
@@ -177,9 +323,14 @@ export async function decisionRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * Get decision by ID
    * GET /api/v1/decisions/:id
+   * Requires: process.read permission (VIEWER role minimum)
    */
   fastify.get(
     '/:id',
+    {
+      schema: { params: idParamSchema },
+      preHandler: [requirePermission('process', 'read')],
+    },
     async (
       request: FastifyRequest<{ Params: { id: string } }>,
       reply: FastifyReply
@@ -212,9 +363,14 @@ export async function decisionRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * Update a decision
    * PATCH /api/v1/decisions/:id
+   * Requires: process.update permission (ANALYST role minimum)
    */
   fastify.patch(
     '/:id',
+    {
+      schema: { params: idParamSchema, body: updateDecisionSchema },
+      preHandler: [requirePermission('process', 'update')],
+    },
     async (
       request: FastifyRequest<{ Params: { id: string }; Body: UpdateDecisionBody }>,
       reply: FastifyReply
@@ -247,15 +403,20 @@ export async function decisionRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * Extract decisions from text
    * POST /api/v1/decisions/extract
+   * Requires: discovery.create permission (ANALYST role minimum)
    */
   fastify.post(
     '/extract',
+    {
+      schema: { body: extractDecisionsSchema },
+      preHandler: [requirePermission('discovery', 'create')],
+    },
     async (
       request: FastifyRequest<{ Body: ExtractDecisionsBody }>,
       reply: FastifyReply
     ) => {
       try {
-        const tenantId = (request as any).tenantId || 'default';
+        const tenantId = getOrganizationId(request);
         const { text, sourceType, sourceId, autoCreate = false } = request.body;
 
         const extracted = await decisionService.extractDecisions(
@@ -295,9 +456,14 @@ export async function decisionRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * Get decision impact analysis
    * GET /api/v1/decisions/:id/impact
+   * Requires: process.read permission (VIEWER role minimum)
    */
   fastify.get(
     '/:id/impact',
+    {
+      schema: { params: idParamSchema },
+      preHandler: [requirePermission('process', 'read')],
+    },
     async (
       request: FastifyRequest<{ Params: { id: string } }>,
       reply: FastifyReply
@@ -330,9 +496,14 @@ export async function decisionRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * Get decision timeline
    * GET /api/v1/decisions/timeline
+   * Requires: process.read permission (VIEWER role minimum)
    */
   fastify.get(
     '/timeline',
+    {
+      schema: { querystring: timelineQuerySchema },
+      preHandler: [requirePermission('process', 'read')],
+    },
     async (
       request: FastifyRequest<{
         Querystring: { startDate?: string; endDate?: string; limit?: string };
@@ -340,7 +511,7 @@ export async function decisionRoutes(fastify: FastifyInstance): Promise<void> {
       reply: FastifyReply
     ) => {
       try {
-        const tenantId = (request as any).tenantId || 'default';
+        const tenantId = getOrganizationId(request);
         const { startDate, endDate, limit } = request.query;
 
         const timeline = await decisionService.getTimeline(tenantId, {
@@ -366,9 +537,14 @@ export async function decisionRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * Get related decisions
    * GET /api/v1/decisions/:id/related
+   * Requires: process.read permission (VIEWER role minimum)
    */
   fastify.get(
     '/:id/related',
+    {
+      schema: { params: idParamSchema, querystring: relatedQuerySchema },
+      preHandler: [requirePermission('process', 'read')],
+    },
     async (
       request: FastifyRequest<{ Params: { id: string }; Querystring: { limit?: string } }>,
       reply: FastifyReply
@@ -399,9 +575,14 @@ export async function decisionRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * Approve a decision
    * POST /api/v1/decisions/:id/approve
+   * Requires: process.update permission (ANALYST role minimum)
    */
   fastify.post(
     '/:id/approve',
+    {
+      schema: { params: idParamSchema },
+      preHandler: [requirePermission('process', 'update')],
+    },
     async (
       request: FastifyRequest<{ Params: { id: string } }>,
       reply: FastifyReply
@@ -436,9 +617,14 @@ export async function decisionRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * Reject a decision
    * POST /api/v1/decisions/:id/reject
+   * Requires: process.update permission (ANALYST role minimum)
    */
   fastify.post(
     '/:id/reject',
+    {
+      schema: { params: idParamSchema, body: rejectDecisionSchema },
+      preHandler: [requirePermission('process', 'update')],
+    },
     async (
       request: FastifyRequest<{ Params: { id: string }; Body: { reason: string } }>,
       reply: FastifyReply

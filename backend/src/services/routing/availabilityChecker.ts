@@ -3,11 +3,9 @@
  * T044 - Implement unavailability detector
  */
 
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../../lib/prisma.js';
 import { logger } from '../../lib/logger.js';
 import { getWorkloadScore } from '../operate/realtimeMetrics.js';
-
-const prisma = new PrismaClient();
 
 // =============================================================================
 // Types

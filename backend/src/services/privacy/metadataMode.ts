@@ -4,9 +4,7 @@
  * T294 - Metadata-only analysis mode
  */
 
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { prisma } from '../../lib/prisma.js';
 
 export interface MetadataModeConfig {
   enabled: boolean;

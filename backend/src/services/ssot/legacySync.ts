@@ -4,7 +4,6 @@
  * T284 - Bi-directional sync service
  */
 
-import { PrismaClient } from '@prisma/client';
 import { v4 as uuidv4 } from 'uuid';
 import { getSsotConfig, getSyncDirection } from './ssotConfig.js';
 import {
@@ -18,8 +17,7 @@ import {
 } from './masterRecordService.js';
 import { detectConflicts, autoResolveConflicts } from './conflictResolver.js';
 import { trackChange } from './changeTracker.js';
-
-const prisma = new PrismaClient();
+import { prisma } from '../../lib/prisma.js';
 
 export type SyncStatus = 'pending' | 'in_progress' | 'completed' | 'failed' | 'partial';
 export type SyncDirection = 'inbound' | 'outbound' | 'bidirectional';

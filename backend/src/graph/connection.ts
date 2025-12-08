@@ -16,15 +16,32 @@ export interface Neo4jConfig {
 
 /**
  * Initialize Neo4j driver
+ * SECURITY: Fails fast if credentials are not configured - no default passwords
  */
 export function initializeNeo4j(config?: Neo4jConfig): Driver {
   if (driver) {
     return driver;
   }
 
-  const uri = config?.uri || process.env.NEO4J_URI || 'bolt://localhost:7687';
-  const username = config?.username || process.env.NEO4J_USERNAME || 'neo4j';
-  const password = config?.password || process.env.NEO4J_PASSWORD || 'password';
+  const uri = config?.uri || process.env.NEO4J_URI;
+  const username = config?.username || process.env.NEO4J_USERNAME;
+  const password = config?.password || process.env.NEO4J_PASSWORD;
+
+  // SECURITY: Fail fast if credentials are missing - never use defaults
+  if (!uri) {
+    throw new Error('NEO4J_URI environment variable is required');
+  }
+  if (!username) {
+    throw new Error('NEO4J_USERNAME environment variable is required');
+  }
+  if (!password) {
+    throw new Error('NEO4J_PASSWORD environment variable is required');
+  }
+
+  // SECURITY: Warn if using weak password patterns (but don't block - might be intentional in dev)
+  if (password === 'password' || password === 'neo4j' || password.length < 8) {
+    console.warn('WARNING: Neo4j password appears weak. Use a strong password in production.');
+  }
 
   driver = neo4j.driver(
     uri,

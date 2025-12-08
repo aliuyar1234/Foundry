@@ -3,7 +3,8 @@
  * AI-powered process optimization detection and analysis
  */
 
-import { PrismaClient, OptimizationType, SuggestionStatus } from '@prisma/client';
+import { OptimizationType, SuggestionStatus } from '@prisma/client';
+import { prisma } from '../../lib/prisma.js';
 import { logger } from '../../lib/logger.js';
 import { getAnthropicClient } from '../../lib/anthropic.js';
 import type {
@@ -19,8 +20,6 @@ import type {
   calculateImpactScore,
   calculatePriorityScore,
 } from '../../models/OptimizationSuggestion.js';
-
-const prisma = new PrismaClient();
 
 /**
  * Process optimization service

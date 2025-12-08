@@ -4,9 +4,7 @@
  * T296 - Role-based data visibility rules
  */
 
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { prisma } from '../../lib/prisma.js';
 
 export type VisibilityLevel = 'full' | 'partial' | 'aggregated' | 'none';
 export type DataCategory =

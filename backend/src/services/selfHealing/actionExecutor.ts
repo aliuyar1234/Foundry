@@ -5,7 +5,7 @@
  * Coordinates execution of automated self-healing actions
  */
 
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../../lib/prisma.js';
 import { logger } from '../../lib/logger.js';
 import type {
   AutomatedAction,
@@ -16,8 +16,6 @@ import type {
   ActionConfig,
   DetectedPattern,
 } from 'shared/types/selfHealing.js';
-
-const prisma = new PrismaClient();
 
 // =============================================================================
 // Types

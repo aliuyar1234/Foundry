@@ -263,3 +263,8 @@ export class SlackConnector extends BaseConnector {
 // Export types and utilities
 export * from './slackClient.js';
 export * from './extractors/index.js';
+
+// Export additional modules
+export * from './workspaceAnalytics.js';
+export * from './incrementalSync.js';
+export * from './eventNormalizer.js';

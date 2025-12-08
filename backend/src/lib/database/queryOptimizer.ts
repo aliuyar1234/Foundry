@@ -435,11 +435,44 @@ export class QueryOptimizer {
   // ==========================================================================
 
   /**
-   * Analyze query plan for optimization
+   * Whitelisted tables that can be analyzed
+   * SECURITY: Only these tables are allowed for EXPLAIN ANALYZE
    */
-  async analyzeQueryPlan(query: string): Promise<any[]> {
+  private static readonly ALLOWED_TABLES = new Set([
+    'Event',
+    'Person',
+    'Organization',
+    'Process',
+    'ProcessStep',
+    'DataSource',
+    'ConnectorInstance',
+    'ConnectorSyncJob',
+    'ComplianceRule',
+    'Assessment',
+    'SOP',
+  ]);
+
+  /**
+   * Analyze query plan for optimization
+   * SECURITY: Only allows simple SELECT queries on whitelisted tables
+   * @param tableName - The table to analyze (must be in whitelist)
+   * @param whereClause - Optional WHERE conditions (parameterized separately)
+   */
+  async analyzeQueryPlan(tableName: string): Promise<any[]> {
     return this.executeWithTiming('analyzeQueryPlan', async () => {
-      const result = await this.prisma.$queryRawUnsafe(`EXPLAIN ANALYZE ${query}`);
+      // SECURITY: Validate table name against whitelist
+      if (!QueryOptimizer.ALLOWED_TABLES.has(tableName)) {
+        throw new Error(`Table "${tableName}" is not allowed for query analysis. Allowed tables: ${Array.from(QueryOptimizer.ALLOWED_TABLES).join(', ')}`);
+      }
+
+      // SECURITY: Only allow alphanumeric table names (defense in depth)
+      if (!/^[A-Za-z][A-Za-z0-9]*$/.test(tableName)) {
+        throw new Error('Invalid table name format');
+      }
+
+      // Use safe query with hardcoded structure - table name is validated above
+      const safeQuery = `EXPLAIN ANALYZE SELECT * FROM "${tableName}" LIMIT 1000`;
+      const result = await this.prisma.$queryRawUnsafe(safeQuery);
       return result as any[];
     });
   }

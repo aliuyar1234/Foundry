@@ -20,3 +20,9 @@ export type { DatevConfig } from './DatevWizard';
 
 export { BmdWizard } from './BmdWizard';
 export type { BmdConfig } from './BmdWizard';
+
+export { SapB1Wizard } from './SapB1Wizard';
+export type { SapB1Config } from './SapB1Wizard';
+
+export { OdooWizard } from './OdooWizard';
+export type { OdooConfig } from './OdooWizard';

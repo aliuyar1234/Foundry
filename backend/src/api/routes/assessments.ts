@@ -4,13 +4,11 @@
  */
 
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { PrismaClient } from '@prisma/client';
 import { z } from 'zod';
 import { Queue } from 'bullmq';
 import { exportToPDF } from '../../services/export/pdfExporter.js';
 import { exportToDOCX } from '../../services/export/docxExporter.js';
-
-const prisma = new PrismaClient();
+import { prisma } from '../../lib/prisma.js';
 
 // Assessment queue
 const assessmentQueue = new Queue('assessments', {

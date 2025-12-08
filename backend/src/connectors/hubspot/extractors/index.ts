@@ -254,3 +254,7 @@ export async function extractAllHubSpotData(
 
   return { events, stats };
 }
+
+// Re-export specialized extractors
+export * from './deals.js';
+export * from './engagements.js';

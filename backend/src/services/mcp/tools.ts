@@ -3,14 +3,12 @@
  * Foundry-specific MCP tools for AI assistants
  */
 
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../../lib/prisma.js';
 import { getSearchService } from '../vector/search.service.js';
 import { runQuery } from '../../graph/connection.js';
 import { logger } from '../../lib/logger.js';
 import type { McpTool, McpToolCallResponse, McpContent } from '../../lib/mcp-types.js';
 import { FOUNDRY_MCP_TOOLS, FOUNDRY_MCP_SCOPES, TOOL_SCOPE_MAP } from '../../lib/mcp-types.js';
-
-const prisma = new PrismaClient();
 
 /**
  * Tool definitions for MCP protocol

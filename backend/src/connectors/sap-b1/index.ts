@@ -13,10 +13,14 @@ import {
 } from '../base/connector.js';
 import { SapB1ClientConfig, SapB1Client, createSapB1Client } from './sapClient.js';
 import { extractAllSapData } from './extractors/index.js';
+import { SapIncrementalSync, createSapIncrementalSync, SAP_SYNC_CONFIGS } from './incrementalSync.js';
+import { SapB1EventNormalizer, createSapB1EventNormalizer } from './eventNormalizer.js';
 
 export interface SapB1ConnectorConfig extends SapB1ClientConfig {
   syncEntities?: string[];
   includeAttachments?: boolean;
+  includeGermanLocalization?: boolean;
+  useIncrementalSync?: boolean;
 }
 
 export class SapB1Connector extends BaseConnector {
@@ -162,23 +166,63 @@ export class SapB1Connector extends BaseConnector {
         message: 'Extracting invoices...',
       });
 
-      // Extract all data
-      const result = await extractAllSapData(client, {
-        organizationId: this.organizationId,
-        lookbackDate,
-      });
+      const config = this.config as SapB1ConnectorConfig;
+      let result: { events: any[]; stats: Record<string, any> };
+
+      // Use incremental sync if enabled
+      if (config.useIncrementalSync && !options.fullSync) {
+        const incrementalSync = createSapIncrementalSync(client);
+        const entityTypes = config.syncEntities || Object.keys(SAP_SYNC_CONFIGS);
+
+        const syncResult = await incrementalSync.syncAll({
+          organizationId: this.organizationId,
+          entityTypes,
+          maxRecordsPerEntity: 1000,
+        });
+
+        // Normalize events if German localization is enabled
+        if (config.includeGermanLocalization) {
+          const normalizer = createSapB1EventNormalizer();
+          const normalizedEvents = normalizer.normalizeEvents(syncResult.events, {
+            organizationId: this.organizationId,
+            instanceId: config.serverUrl,
+            companyDb: config.companyDb,
+            includeGermanLocalization: true,
+          });
+          result = {
+            events: normalizedEvents,
+            stats: syncResult.stats,
+          };
+        } else {
+          result = {
+            events: syncResult.events,
+            stats: syncResult.stats,
+          };
+        }
+      } else {
+        // Legacy full sync
+        const legacyResult = await extractAllSapData(client, {
+          organizationId: this.organizationId,
+          lookbackDate,
+        });
+        result = {
+          events: legacyResult.events,
+          stats: legacyResult.stats,
+        };
+      }
 
       onProgress?.({
         current: 100,
         total: 100,
         stage: 'complete',
-        message: `Sync complete. Processed ${result.stats.total} records.`,
+        message: `Sync complete. Processed ${result.events.length} records.`,
       });
 
       return {
         success: true,
-        eventsCount: result.stats.total,
+        eventsCount: result.events.length,
         deltaToken: new Date().toISOString(),
+        metadata: { stats: result.stats },
       };
     } catch (error) {
       return {
@@ -224,3 +268,10 @@ export class SapB1Connector extends BaseConnector {
 // Export types and utilities
 export * from './sapClient.js';
 export * from './extractors/index.js';
+export * from './auth.js';
+export * from './sessionManager.js';
+export * from './databaseSelector.js';
+export * from './germanDocTypes.js';
+export * from './versionDetector.js';
+export * from './eventNormalizer.js';
+export * from './incrementalSync.js';

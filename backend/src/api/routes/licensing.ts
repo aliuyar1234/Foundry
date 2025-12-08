@@ -10,10 +10,9 @@ import { z } from 'zod';
 import { LicenseService } from '../../services/licensing/licenseService';
 import { OfflineModeService } from '../../services/licensing/offlineModeService';
 import { requireAuth, requireRole } from '../middleware/auth';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../../lib/prisma.js';
 
 const router = Router();
-const prisma = new PrismaClient();
 const licenseService = new LicenseService(prisma);
 const offlineModeService = new OfflineModeService(prisma, licenseService);
 

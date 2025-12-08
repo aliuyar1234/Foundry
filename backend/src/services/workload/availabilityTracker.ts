@@ -5,7 +5,7 @@
  * Provides real-time availability tracking and scheduling assistance
  */
 
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../../lib/prisma.js';
 import { EventEmitter } from 'events';
 import { getCalendarEvents, getAvailability as getCalendarAvailability } from './calendarIntegration.js';
 
@@ -111,7 +111,6 @@ export interface ScheduleSuggestion {
 // Availability Tracker
 // =============================================================================
 
-const prisma = new PrismaClient();
 const availabilityEmitter = new EventEmitter();
 
 // In-memory status cache (would be Redis in production)

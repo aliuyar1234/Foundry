@@ -4,7 +4,6 @@
  */
 
 import { Job } from 'bullmq';
-import { PrismaClient } from '@prisma/client';
 import { BaseProcessor } from './baseProcessor.js';
 import {
   SOPGenerator,
@@ -13,6 +12,7 @@ import {
 } from '../../services/reporting/sop/sopGenerator.js';
 import { SOPGenerationOptions } from '../../services/reporting/sop/prompts/sopTemplates.js';
 import { ProcessData, enrichProcessData, validateProcessData } from '../../services/reporting/sop/inputFormatter.js';
+import { prisma } from '../../lib/prisma.js';
 
 export interface SOPGenerationJobData {
   organizationId: string;
@@ -42,12 +42,10 @@ export class SOPGenerationProcessor extends BaseProcessor<
   SOPGenerationJobData,
   SOPGenerationJobResult
 > {
-  private prisma: PrismaClient;
   private sopGenerator: SOPGenerator;
 
   constructor() {
     super('sop-generation');
-    this.prisma = new PrismaClient();
     this.sopGenerator = createSOPGenerator();
   }
 
@@ -112,7 +110,7 @@ export class SOPGenerationProcessor extends BaseProcessor<
    */
   private async fetchProcessData(organizationId: string, processId: string): Promise<ProcessData> {
     // Fetch process from database
-    const process = await this.prisma.discoveredProcess.findFirst({
+    const process = await prisma.discoveredProcess.findFirst({
       where: {
         id: processId,
         organizationId,
@@ -183,7 +181,7 @@ export class SOPGenerationProcessor extends BaseProcessor<
     };
 
     // Fetch participants
-    const participants = await this.prisma.person.findMany({
+    const participants = await prisma.person.findMany({
       where: {
         organizationId,
         processSteps: {
@@ -215,7 +213,7 @@ export class SOPGenerationProcessor extends BaseProcessor<
     result: SOPGenerationResult,
     options: Partial<SOPGenerationOptions>
   ): Promise<{ id: string }> {
-    const sop = await this.prisma.sOP.create({
+    const sop = await prisma.sOP.create({
       data: {
         organizationId,
         processId,
@@ -239,7 +237,7 @@ export class SOPGenerationProcessor extends BaseProcessor<
     });
 
     // Create initial version record
-    await this.prisma.sOPVersion.create({
+    await prisma.sOPVersion.create({
       data: {
         sopId: sop.id,
         version: result.version,
@@ -253,7 +251,7 @@ export class SOPGenerationProcessor extends BaseProcessor<
   }
 
   async cleanup(): Promise<void> {
-    await this.prisma.$disconnect();
+    // Prisma singleton is managed centrally - no need to disconnect here
   }
 }
 

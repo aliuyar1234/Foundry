@@ -10,6 +10,7 @@ import { getCacheStats, clearApiCache } from '../middleware/cache.js';
 import { getCacheStats as getGraphCacheStats, invalidateOrganizationCache } from '../../lib/cache/graphCache.js';
 import { getRetentionPolicySummary } from '../../jobs/processors/retentionProcessor.js';
 import { getAggregateStatus } from '../../jobs/processors/aggregateRefresh.js';
+import { logger } from '../../lib/logger.js';
 
 // Queue registry
 const queues: Map<string, Queue> = new Map();
@@ -54,10 +55,11 @@ export default async function adminRoutes(fastify: FastifyInstance) {
               },
             };
           } catch (error) {
+            logger.error({ error, queueName: name }, 'Failed to get queue status');
             return {
               name,
               status: 'error',
-              error: error instanceof Error ? error.message : 'Unknown error',
+              error: 'Failed to retrieve queue status',
             };
           }
         })
@@ -127,9 +129,9 @@ export default async function adminRoutes(fastify: FastifyInstance) {
           },
         });
       } catch (error) {
+        logger.error({ error, queueName: name }, 'Failed to get queue details');
         return reply.status(500).send({
           error: 'Failed to get queue details',
-          message: error instanceof Error ? error.message : 'Unknown error',
         });
       }
     }

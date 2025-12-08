@@ -5,7 +5,7 @@
  * Detects and manages compliance violations
  */
 
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../../lib/prisma.js';
 import type {
   ComplianceViolation,
   ViolationStatus,
@@ -15,8 +15,6 @@ import type {
   ComplianceCategory,
 } from 'shared/types/compliance.js';
 import { evaluateRule, evaluateAllRules, type RuleEvaluationResult } from './ruleEngine.js';
-
-const prisma = new PrismaClient();
 
 // =============================================================================
 // Types

@@ -4,11 +4,9 @@
  * T281 - Master record management
  */
 
-import { PrismaClient } from '@prisma/client';
 import { v4 as uuidv4 } from 'uuid';
 import { getSsotConfig, isSsotEnabled } from './ssotConfig.js';
-
-const prisma = new PrismaClient();
+import { prisma } from '../../lib/prisma.js';
 
 export type MasterRecordStatus = 'active' | 'pending' | 'archived' | 'deleted';
 

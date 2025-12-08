@@ -3,7 +3,8 @@
  * CRUD operations and business logic for Standard Operating Procedures
  */
 
-import { PrismaClient, SOP, SOPVersion } from '@prisma/client';
+import { SOP, SOPVersion } from '@prisma/client';
+import { prisma } from '../../../lib/prisma.js';
 
 export type SOPStatus = 'draft' | 'review' | 'approved' | 'published' | 'archived';
 
@@ -51,10 +52,10 @@ export interface SOPWithVersions extends SOP {
 }
 
 export class SOPService {
-  private prisma: PrismaClient;
+  constructor() {}
 
-  constructor(prisma?: PrismaClient) {
-    this.prisma = prisma || new PrismaClient();
+  private get db() {
+    return prisma;
   }
 
   /**
@@ -63,7 +64,7 @@ export class SOPService {
   async createSOP(organizationId: string, input: CreateSOPInput): Promise<SOP> {
     const version = this.generateVersion();
 
-    const sop = await this.prisma.sOP.create({
+    const sop = await this.db.sOP.create({
       data: {
         organizationId,
         processId: input.processId,
@@ -78,7 +79,7 @@ export class SOPService {
     });
 
     // Create initial version record
-    await this.prisma.sOPVersion.create({
+    await this.db.sOPVersion.create({
       data: {
         sopId: sop.id,
         version,
@@ -99,7 +100,7 @@ export class SOPService {
     sopId: string,
     includeVersions = false
   ): Promise<SOPWithVersions | null> {
-    const sop = await this.prisma.sOP.findFirst({
+    const sop = await this.db.sOP.findFirst({
       where: {
         id: sopId,
         organizationId,
@@ -169,7 +170,7 @@ export class SOPService {
     }
 
     const [data, total] = await Promise.all([
-      this.prisma.sOP.findMany({
+      this.db.sOP.findMany({
         where,
         include: {
           process: {
@@ -183,7 +184,7 @@ export class SOPService {
         take: limit,
         skip: offset,
       }),
-      this.prisma.sOP.count({ where }),
+      this.db.sOP.count({ where }),
     ]);
 
     return { data, total };
@@ -210,7 +211,7 @@ export class SOPService {
       : currentSOP.version;
 
     // Update SOP
-    const sop = await this.prisma.sOP.update({
+    const sop = await this.db.sOP.update({
       where: { id: sopId },
       data: {
         title: input.title,
@@ -226,7 +227,7 @@ export class SOPService {
 
     // Create version record if content changed
     if (contentChanged && input.content) {
-      await this.prisma.sOPVersion.create({
+      await this.db.sOPVersion.create({
         data: {
           sopId: sop.id,
           version: newVersion,
@@ -250,12 +251,12 @@ export class SOPService {
     }
 
     // Delete versions first
-    await this.prisma.sOPVersion.deleteMany({
+    await this.db.sOPVersion.deleteMany({
       where: { sopId },
     });
 
     // Delete SOP
-    await this.prisma.sOP.delete({
+    await this.db.sOP.delete({
       where: { id: sopId },
     });
   }
@@ -269,7 +270,7 @@ export class SOPService {
       throw new Error(`SOP not found: ${sopId}`);
     }
 
-    return this.prisma.sOPVersion.findMany({
+    return this.db.sOPVersion.findMany({
       where: { sopId },
       orderBy: { createdAt: 'desc' },
     });
@@ -288,7 +289,7 @@ export class SOPService {
       throw new Error(`SOP not found: ${sopId}`);
     }
 
-    return this.prisma.sOPVersion.findFirst({
+    return this.db.sOPVersion.findFirst({
       where: {
         id: versionId,
         sopId,
@@ -334,7 +335,7 @@ export class SOPService {
     // Validate status transition
     this.validateStatusTransition(sop.status as SOPStatus, status);
 
-    return this.prisma.sOP.update({
+    return this.db.sOP.update({
       where: { id: sopId },
       data: {
         status,
@@ -400,22 +401,22 @@ export class SOPService {
     recentlyUpdated: number;
   }> {
     const [total, byStatus, byLanguage, avgConfidence, recentlyUpdated] = await Promise.all([
-      this.prisma.sOP.count({ where: { organizationId } }),
-      this.prisma.sOP.groupBy({
+      this.db.sOP.count({ where: { organizationId } }),
+      this.db.sOP.groupBy({
         by: ['status'],
         where: { organizationId },
         _count: { status: true },
       }),
-      this.prisma.sOP.groupBy({
+      this.db.sOP.groupBy({
         by: ['language'],
         where: { organizationId },
         _count: { language: true },
       }),
-      this.prisma.sOP.aggregate({
+      this.db.sOP.aggregate({
         where: { organizationId },
         _avg: { confidence: true },
       }),
-      this.prisma.sOP.count({
+      this.db.sOP.count({
         where: {
           organizationId,
           updatedAt: {

@@ -7,7 +7,7 @@
 
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../../lib/prisma.js';
 import { logger } from '../../lib/logger.js';
 
 // Pattern Detection
@@ -82,7 +82,6 @@ import {
 import type { PatternType, AutomatedAction } from 'shared/types/selfHealing.js';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 // =============================================================================
 // Validation Schemas

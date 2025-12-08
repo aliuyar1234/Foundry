@@ -5,15 +5,13 @@
  * Specialized compliance checks for GDPR requirements
  */
 
-import { PrismaClient } from '@prisma/client';
 import type {
   ComplianceRule,
   EvaluationFinding,
   RuleEvaluationContext,
 } from '../ruleEngine.js';
 import { registerCustomEvaluator } from '../ruleEngine.js';
-
-const prisma = new PrismaClient();
+import { prisma } from '../../../lib/prisma.js';
 
 // =============================================================================
 // Types

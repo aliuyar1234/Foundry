@@ -3,11 +3,9 @@
  * T046 - Create routing decision logger
  */
 
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../../lib/prisma.js';
 import { logger } from '../../lib/logger.js';
 import { insertRoutingDecision } from '../operate/timescaleClient.js';
-
-const prisma = new PrismaClient();
 
 // =============================================================================
 // Types

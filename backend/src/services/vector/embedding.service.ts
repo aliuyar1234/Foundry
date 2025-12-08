@@ -3,7 +3,7 @@
  * Generates and manages embeddings via OpenAI
  */
 
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../../lib/prisma.js';
 import {
   generateEmbedding,
   generateEmbeddingsBatch,
@@ -28,8 +28,6 @@ import type {
 } from '../../models/Embedding.js';
 import { SourceType } from '../../models/Embedding.js';
 import { IndexStatus } from '../../models/VectorIndex.js';
-
-const prisma = new PrismaClient();
 
 /**
  * Embedding generation options

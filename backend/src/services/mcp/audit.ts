@@ -3,7 +3,7 @@
  * Records all MCP tool interactions for compliance
  */
 
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../../lib/prisma.js';
 import { logger } from '../../lib/logger.js';
 import type {
   McpAuditLog,
@@ -12,8 +12,6 @@ import type {
   McpAuditStats,
 } from '../../models/McpAuditLog.js';
 import { sanitizeParameters, truncateParameters } from '../../models/McpAuditLog.js';
-
-const prisma = new PrismaClient();
 
 /**
  * MCP Audit Service

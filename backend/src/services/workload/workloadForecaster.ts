@@ -5,7 +5,7 @@
  * Uses historical data to predict future workload
  */
 
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../../lib/prisma.js';
 
 // =============================================================================
 // Types
@@ -71,8 +71,6 @@ export interface ForecastModel {
 // =============================================================================
 // Workload Forecaster
 // =============================================================================
-
-const prisma = new PrismaClient();
 
 /**
  * Generate workload forecast for a person

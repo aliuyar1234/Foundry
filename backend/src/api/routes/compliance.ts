@@ -7,7 +7,7 @@
 
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../../lib/prisma.js';
 import {
   evaluateRule,
   evaluateAllRules,
@@ -51,7 +51,6 @@ import type {
   ComplianceReportType,
 } from 'shared/types/compliance.js';
 
-const prisma = new PrismaClient();
 const router = Router();
 
 // =============================================================================

@@ -3,7 +3,7 @@
  * Handles session creation, validation, and expiration
  */
 
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../../lib/prisma.js';
 import { Redis } from 'ioredis';
 import { v4 as uuidv4 } from 'uuid';
 import { logger } from '../../lib/logger.js';
@@ -14,8 +14,6 @@ import type {
   SessionValidationResult,
 } from '../../models/McpSession.js';
 import { MCP_SESSION_DEFAULTS, hasScope, McpScope } from '../../models/McpSession.js';
-
-const prisma = new PrismaClient();
 
 // Redis key prefixes
 const SESSION_PREFIX = 'mcp:session:';

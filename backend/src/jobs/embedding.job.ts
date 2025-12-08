@@ -4,13 +4,11 @@
  */
 
 import { Job, Queue, Worker } from 'bullmq';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma.js';
 import { getEmbeddingService, EmbeddingService } from '../services/vector/embedding.service.js';
 import { logger } from '../lib/logger.js';
 import type { SourceDocument } from '../models/Embedding.js';
 import { SourceType } from '../models/Embedding.js';
-
-const prisma = new PrismaClient();
 
 /**
  * Job data for embedding tasks

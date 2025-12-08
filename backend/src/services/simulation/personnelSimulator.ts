@@ -3,10 +3,8 @@
  * Simulates the impact of personnel changes on the organization
  */
 
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../../lib/prisma.js';
 import { neo4jConnection } from '../../graph/connection';
-
-const prisma = new PrismaClient();
 
 export interface PersonnelChange {
   type: 'departure' | 'absence' | 'role_change' | 'team_transfer';

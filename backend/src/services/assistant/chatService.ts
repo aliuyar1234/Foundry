@@ -3,7 +3,7 @@
  * T071 - Create conversation session manager
  */
 
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../../lib/prisma.js';
 import { randomUUID } from 'crypto';
 import { logger } from '../../lib/logger.js';
 import { retrieveContext, type RetrievedContext } from './contextRetriever.js';
@@ -12,8 +12,6 @@ import { buildConversationContext } from './conversationContext.js';
 import { filterByPermissions } from './permissionFilter.js';
 import { formatResponse } from './responseFormatter.js';
 import { detectLanguage } from './languageDetector.js';
-
-const prisma = new PrismaClient();
 
 // =============================================================================
 // Types

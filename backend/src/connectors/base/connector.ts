@@ -171,6 +171,104 @@ export interface ConnectorCapabilities {
 }
 
 /**
+ * Rate limiting callbacks for connectors (T001)
+ */
+export interface RateLimitCallbacks {
+  /** Called when rate limit is approaching (e.g., 80% consumed) */
+  onRateLimitWarning?: (remaining: number, resetAt: Date) => void;
+  /** Called when rate limit is hit and waiting */
+  onRateLimitHit?: (retryAfter: number) => void;
+  /** Called after rate limit wait completes */
+  onRateLimitRecovered?: () => void;
+}
+
+/**
+ * Extended connector configuration with rate limiting
+ */
+export interface ExtendedConnectorConfig extends ConnectorConfig {
+  rateLimits?: {
+    requestsPerSecond?: number;
+    requestsPerMinute?: number;
+    requestsPerHour?: number;
+    requestsPerDay?: number;
+    burstLimit?: number;
+  };
+  retryPolicy?: {
+    maxRetries?: number;
+    initialDelayMs?: number;
+    maxDelayMs?: number;
+    backoffMultiplier?: number;
+  };
+}
+
+/**
+ * Health check result
+ */
+export interface HealthCheckResult {
+  healthy: boolean;
+  status: 'connected' | 'degraded' | 'disconnected' | 'error';
+  latencyMs?: number;
+  lastSuccessfulSync?: Date;
+  error?: string;
+  details?: Record<string, unknown>;
+}
+
+/**
+ * Sync checkpoint for resume capability
+ */
+export interface SyncCheckpoint {
+  connectorType: string;
+  instanceId: string;
+  resource: string;
+  cursor?: string;
+  pageToken?: string;
+  timestamp: Date;
+  processedCount: number;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Extended data connector interface with rate limiting
+ */
+export interface IDataConnector {
+  readonly type: string;
+  readonly capabilities: ConnectorCapabilities;
+
+  // Configuration
+  validateConfig(): { valid: boolean; errors?: string[] };
+  updateConfig(updates: Partial<ConnectorConfig>): void;
+
+  // Authentication
+  getAuthorizationUrl(redirectUri: string, state: string): string;
+  exchangeCodeForTokens(code: string, redirectUri: string): Promise<AuthResult>;
+  refreshAccessToken(): Promise<AuthResult>;
+  isAuthenticated(): boolean;
+
+  // Connection
+  testConnection(): Promise<{ success: boolean; error?: string }>;
+  healthCheck(): Promise<HealthCheckResult>;
+
+  // Sync with rate limiting support
+  sync(
+    options: SyncOptions,
+    callbacks?: {
+      onProgress?: SyncProgressCallback;
+      onRateLimit?: RateLimitCallbacks;
+    }
+  ): Promise<SyncResult>;
+
+  // Checkpoint management
+  getCheckpoint(resource: string): Promise<SyncCheckpoint | null>;
+  saveCheckpoint(checkpoint: SyncCheckpoint): Promise<void>;
+  clearCheckpoint(resource: string): Promise<void>;
+
+  // Resource info
+  get dataSourceId(): string;
+  get organizationId(): string;
+  get deltaToken(): string | null;
+}
+
+/**
  * Connector metadata
  */
 export interface ConnectorMetadata {

@@ -3,11 +3,9 @@
  * T041 - Create workload balancer for routing
  */
 
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../../lib/prisma.js';
 import { logger } from '../../lib/logger.js';
 import { getWorkloadScore, getHighestWorkload, getHighBurnoutRisk } from '../operate/realtimeMetrics.js';
-
-const prisma = new PrismaClient();
 
 // =============================================================================
 // Types

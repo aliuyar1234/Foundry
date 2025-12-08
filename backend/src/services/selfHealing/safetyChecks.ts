@@ -5,15 +5,13 @@
  * Validates actions before execution to prevent harmful operations
  */
 
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../../lib/prisma.js';
 import { logger } from '../../lib/logger.js';
 import type {
   AutomatedAction,
   ActionConfig,
   DetectedPattern,
 } from 'shared/types/selfHealing.js';
-
-const prisma = new PrismaClient();
 
 // =============================================================================
 // Types

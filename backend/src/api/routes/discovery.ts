@@ -1,11 +1,15 @@
 /**
  * Discovery API Routes
  * Endpoints for process discovery and analysis
+ *
+ * SECURITY: All routes require authentication (applied globally in routes/index.ts)
+ * Organization context is automatically set from authenticated user's JWT claims
  */
 
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { Pool } from 'pg';
 import { z } from 'zod';
+import { getOrganizationId } from '../middleware/organization.js';
 import { createProcessDiscoveryService } from '../../services/discovery/index.js';
 import {
   findProcessById,
@@ -85,7 +89,7 @@ export default async function discoveryRoutes(fastify: FastifyInstance) {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const organizationId = request.organizationId!;
+      const organizationId = getOrganizationId(request);
       const body = discoverProcessesSchema.parse(request.body);
 
       const results = await discoveryService.discoverProcesses(
@@ -139,7 +143,7 @@ export default async function discoveryRoutes(fastify: FastifyInstance) {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const organizationId = request.organizationId!;
+      const organizationId = getOrganizationId(request);
       const query = paginationSchema.extend({
         status: z.enum(['discovered', 'validated', 'documented']).optional(),
       }).parse(request.query);
@@ -182,7 +186,8 @@ export default async function discoveryRoutes(fastify: FastifyInstance) {
       }
 
       // Check organization access
-      if (process.organizationId !== request.organizationId) {
+      const organizationId = getOrganizationId(request);
+      if (process.organizationId !== organizationId) {
         return reply.status(403).send({
           success: false,
           error: 'Access denied',
@@ -330,7 +335,7 @@ export default async function discoveryRoutes(fastify: FastifyInstance) {
     async (request: FastifyRequest, reply: FastifyReply) => {
       const { processId } = processIdParamSchema.parse(request.params);
       const body = discoverProcessesSchema.parse(request.body);
-      const organizationId = request.organizationId!;
+      const organizationId = getOrganizationId(request);
 
       const result = await discoveryService.calculateProcessConformance(
         processId,
@@ -366,7 +371,7 @@ export default async function discoveryRoutes(fastify: FastifyInstance) {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const organizationId = request.organizationId!;
+      const organizationId = getOrganizationId(request);
       const query = paginationSchema.parse(request.query);
 
       const people = await findPersonsWithMetrics(organizationId, {
@@ -394,7 +399,7 @@ export default async function discoveryRoutes(fastify: FastifyInstance) {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const organizationId = request.organizationId!;
+      const organizationId = getOrganizationId(request);
       const query = networkQuerySchema.parse(request.query);
 
       let communications;
@@ -437,7 +442,7 @@ export default async function discoveryRoutes(fastify: FastifyInstance) {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const organizationId = request.organizationId!;
+      const organizationId = getOrganizationId(request);
       const query = z.object({
         rootEmail: z.string().email().optional(),
       }).parse(request.query);
@@ -470,7 +475,7 @@ export default async function discoveryRoutes(fastify: FastifyInstance) {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const organizationId = request.organizationId!;
+      const organizationId = getOrganizationId(request);
       const body = bpmnExportSchema.parse(request.body);
 
       const results = await exportToBpmn(pool, {
@@ -519,7 +524,7 @@ export default async function discoveryRoutes(fastify: FastifyInstance) {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const organizationId = request.organizationId!;
+      const organizationId = getOrganizationId(request);
       const { processId } = processIdParamSchema.parse(request.params);
       const query = z.object({
         includeParticipants: z.coerce.boolean().optional(),
@@ -586,7 +591,7 @@ export default async function discoveryRoutes(fastify: FastifyInstance) {
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const organizationId = request.organizationId!;
+      const organizationId = getOrganizationId(request);
       const { processId } = processIdParamSchema.parse(request.params);
       const query = z.object({
         includeParticipants: z.coerce.boolean().optional(),

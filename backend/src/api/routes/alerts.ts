@@ -6,7 +6,8 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { Pool } from 'pg';
 import { z } from 'zod';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../../lib/prisma.js';
+import { logger } from '../../lib/logger.js';
 import {
   AlertService,
   createAlertService,
@@ -115,7 +116,6 @@ const updateSubscriptionSchema = z.object({
 
 export default async function alertsRoutes(fastify: FastifyInstance) {
   const pool = new Pool({ connectionString: process.env.TIMESCALE_URL });
-  const prisma = new PrismaClient();
 
   const insightService = createInsightService(pool, prisma);
   const alertService = createAlertService(pool, prisma, insightService);
@@ -568,10 +568,11 @@ export default async function alertsRoutes(fastify: FastifyInstance) {
               break;
           }
         } catch (error) {
+          logger.error({ error, channel: channel.type }, 'Channel test failed');
           results.push({
             channel: channel.type,
             success: false,
-            error: error instanceof Error ? error.message : 'Unknown error',
+            error: 'Channel test failed',
           });
         }
       }

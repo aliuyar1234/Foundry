@@ -3,7 +3,10 @@
  * Records all significant actions for compliance and debugging
  */
 
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../../lib/prisma.js';
+import { logger } from '../../lib/logger.js';
+
+const auditLogger = logger.child({ service: 'AuditService' });
 
 export interface AuditLogEntry {
   action: string;
@@ -90,19 +93,52 @@ export const AuditActions = {
 
   // Admin
   SETTINGS_UPDATE: 'settings.update',
+  ADMIN_CACHE_CLEAR: 'admin.cache_clear',
+  ADMIN_QUEUE_MANAGE: 'admin.queue_manage',
+
+  // Security - Session/Token Management
+  SESSION_REVOKE: 'security.session_revoke',
+  SESSION_REVOKE_ALL: 'security.session_revoke_all',
+  TOKEN_REVOKE: 'security.token_revoke',
+  ORG_TOKENS_REVOKE: 'security.org_tokens_revoke',
+  USER_TOKENS_REVOKE: 'security.user_tokens_revoke',
+
+  // Security - Credentials
+  CREDENTIAL_CREATE: 'security.credential_create',
+  CREDENTIAL_UPDATE: 'security.credential_update',
+  CREDENTIAL_DELETE: 'security.credential_delete',
+  CREDENTIAL_ACCESS: 'security.credential_access',
+
+  // Security - Permissions
+  PERMISSION_GRANT: 'security.permission_grant',
+  PERMISSION_REVOKE: 'security.permission_revoke',
+  ROLE_CHANGE: 'security.role_change',
+
+  // Security - Access Control
+  IP_ALLOWLIST_UPDATE: 'security.ip_allowlist_update',
+  SSO_CONFIG_UPDATE: 'security.sso_config_update',
+
+  // Connector
+  CONNECTOR_CREATE: 'connector.create',
+  CONNECTOR_UPDATE: 'connector.update',
+  CONNECTOR_DELETE: 'connector.delete',
+  CONNECTOR_CREDENTIAL_UPDATE: 'connector.credential_update',
+  CONNECTOR_TEST: 'connector.test',
+  CONNECTOR_SYNC: 'connector.sync',
+
+  // Rate Limiting
+  RATE_LIMIT_EXCEEDED: 'security.rate_limit_exceeded',
 } as const;
 
 export type AuditAction = (typeof AuditActions)[keyof typeof AuditActions];
 
 export class AuditService {
-  constructor(private prisma: PrismaClient) {}
-
   /**
    * Log an audit event
    */
   async log(entry: AuditLogEntry): Promise<void> {
     try {
-      await this.prisma.auditLog.create({
+      await prisma.auditLog.create({
         data: {
           action: entry.action,
           resourceType: entry.resourceType,
@@ -114,9 +150,24 @@ export class AuditService {
           userAgent: entry.userAgent,
         },
       });
+
+      // Also log security-sensitive actions to structured logger for SIEM integration
+      if (entry.action.startsWith('security.') || entry.action.startsWith('admin.')) {
+        auditLogger.info(
+          {
+            action: entry.action,
+            resourceType: entry.resourceType,
+            resourceId: entry.resourceId,
+            userId: entry.userId,
+            organizationId: entry.organizationId,
+            ipAddress: entry.ipAddress,
+          },
+          `Security audit: ${entry.action}`
+        );
+      }
     } catch (error) {
       // Log audit failures but don't throw - auditing should not break the main flow
-      console.error('Failed to write audit log:', error);
+      auditLogger.error({ error, entry }, 'Failed to write audit log');
     }
   }
 
@@ -168,7 +219,7 @@ export class AuditService {
     };
 
     const [logs, total] = await Promise.all([
-      this.prisma.auditLog.findMany({
+      prisma.auditLog.findMany({
         where,
         orderBy: { createdAt: sortOrder },
         skip: (page - 1) * pageSize,
@@ -183,7 +234,7 @@ export class AuditService {
           },
         },
       }),
-      this.prisma.auditLog.count({ where }),
+      prisma.auditLog.count({ where }),
     ]);
 
     return {
@@ -208,7 +259,7 @@ export class AuditService {
     resourceId: string,
     limit = 100
   ) {
-    return this.prisma.auditLog.findMany({
+    return prisma.auditLog.findMany({
       where: {
         organizationId,
         resourceType,
@@ -236,7 +287,7 @@ export class AuditService {
     userId: string,
     limit = 100
   ) {
-    return this.prisma.auditLog.findMany({
+    return prisma.auditLog.findMany({
       where: {
         organizationId,
         userId,
@@ -245,14 +296,51 @@ export class AuditService {
       take: limit,
     });
   }
+
+  /**
+   * Log a security-sensitive action with enhanced context
+   */
+  async logSecurityAction(
+    action: AuditAction,
+    entry: Omit<AuditLogEntry, 'action'> & {
+      outcome?: 'success' | 'failure' | 'blocked';
+      severity?: 'low' | 'medium' | 'high' | 'critical';
+    }
+  ): Promise<void> {
+    const { outcome = 'success', severity = 'medium', ...rest } = entry;
+
+    await this.log({
+      action,
+      ...rest,
+      details: {
+        ...rest.details,
+        outcome,
+        severity,
+        timestamp: new Date().toISOString(),
+      },
+    });
+
+    // Critical security events get additional logging
+    if (severity === 'critical' || outcome === 'blocked') {
+      auditLogger.warn(
+        {
+          action,
+          outcome,
+          severity,
+          userId: entry.userId,
+          organizationId: entry.organizationId,
+          ipAddress: entry.ipAddress,
+        },
+        `Critical security event: ${action}`
+      );
+    }
+  }
 }
 
-// Factory function
-let auditServiceInstance: AuditService | null = null;
+// Singleton instance
+export const auditService = new AuditService();
 
-export function createAuditService(prisma: PrismaClient): AuditService {
-  if (!auditServiceInstance) {
-    auditServiceInstance = new AuditService(prisma);
-  }
-  return auditServiceInstance;
+// Factory function for backwards compatibility
+export function createAuditService(): AuditService {
+  return auditService;
 }

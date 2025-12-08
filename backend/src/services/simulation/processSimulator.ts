@@ -3,10 +3,8 @@
  * Simulates the impact of process changes on the organization
  */
 
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../../lib/prisma.js';
 import { neo4jConnection } from '../../graph/connection';
-
-const prisma = new PrismaClient();
 
 export interface ProcessChange {
   type: 'modification' | 'elimination' | 'automation' | 'merger' | 'split';

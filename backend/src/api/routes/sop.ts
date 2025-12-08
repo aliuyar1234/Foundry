@@ -1,12 +1,93 @@
 /**
  * SOP API Routes (T083-T086)
  * Endpoints for SOP generation and management
+ *
+ * SECURITY: All routes require authentication (applied globally in routes/index.ts)
+ * SECURITY: RBAC permission checks applied per-endpoint
+ * SECURITY: Input validation via Fastify JSON Schema
  */
 
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { getSopService } from '../../services/sop/sop.service.js';
 import { logger } from '../../lib/logger.js';
 import type { SopDraftStatus } from '@prisma/client';
+import { getOrganizationId } from '../middleware/organization.js';
+import { requirePermission } from '../middleware/permissions.js';
+
+// =============================================================================
+// Validation Schemas (Fastify JSON Schema)
+// =============================================================================
+
+const sopDraftStatusEnum = ['DRAFT', 'PENDING_REVIEW', 'APPROVED', 'REJECTED', 'PUBLISHED', 'ARCHIVED'];
+
+const generateSopSchema = {
+  type: 'object',
+  required: ['processId'],
+  properties: {
+    processId: { type: 'string', minLength: 1, maxLength: 100 },
+    options: {
+      type: 'object',
+      properties: {
+        detailLevel: { type: 'string', enum: ['summary', 'standard', 'detailed'] },
+        focusAreas: { type: 'array', items: { type: 'string', maxLength: 200 }, maxItems: 20 },
+        includeDecisions: { type: 'boolean' },
+        includeQualityChecks: { type: 'boolean' },
+        customInstructions: { type: 'string', maxLength: 5000 },
+      },
+      additionalProperties: false,
+    },
+  },
+  additionalProperties: false,
+} as const;
+
+const updateSopSchema = {
+  type: 'object',
+  properties: {
+    title: { type: 'string', minLength: 1, maxLength: 500 },
+    content: { type: 'object', additionalProperties: true },
+    metadata: { type: 'object', additionalProperties: true },
+    status: { type: 'string', enum: sopDraftStatusEnum },
+  },
+  additionalProperties: false,
+} as const;
+
+const reviewSchema = {
+  type: 'object',
+  required: ['action'],
+  properties: {
+    action: { type: 'string', enum: ['approve', 'reject'] },
+    comments: { type: 'string', maxLength: 5000 },
+  },
+  additionalProperties: false,
+} as const;
+
+const versionSchema = {
+  type: 'object',
+  properties: {
+    versionType: { type: 'string', enum: ['major', 'minor', 'patch'], default: 'minor' },
+  },
+  additionalProperties: false,
+} as const;
+
+const idParamSchema = {
+  type: 'object',
+  required: ['id'],
+  properties: {
+    id: { type: 'string', minLength: 1, maxLength: 100 },
+  },
+} as const;
+
+const processIdParamSchema = {
+  type: 'object',
+  required: ['processId'],
+  properties: {
+    processId: { type: 'string', minLength: 1, maxLength: 100 },
+  },
+} as const;
+
+// =============================================================================
+// Request body types (for TypeScript)
+// =============================================================================
 
 /**
  * Request body types
@@ -43,12 +124,17 @@ export async function sopRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * Generate SOP for a process
    * POST /api/v1/sop/generate
+   * Requires: sop.create permission (ANALYST role minimum)
    */
   fastify.post(
     '/generate',
+    {
+      schema: { body: generateSopSchema },
+      preHandler: [requirePermission('sop', 'create')],
+    },
     async (request: FastifyRequest<{ Body: GenerateSopBody }>, reply: FastifyReply) => {
       try {
-        const tenantId = (request as any).tenantId || 'default';
+        const tenantId = getOrganizationId(request);
         const { processId, options } = request.body;
 
         const sop = await sopService.generateSop({
@@ -74,9 +160,14 @@ export async function sopRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * Get SOP by ID
    * GET /api/v1/sop/:id
+   * Requires: sop.read permission (VIEWER role minimum)
    */
   fastify.get(
     '/:id',
+    {
+      schema: { params: idParamSchema },
+      preHandler: [requirePermission('sop', 'read')],
+    },
     async (
       request: FastifyRequest<{ Params: { id: string } }>,
       reply: FastifyReply
@@ -109,9 +200,14 @@ export async function sopRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * Get SOPs for a process
    * GET /api/v1/sop/process/:processId
+   * Requires: sop.read permission (VIEWER role minimum)
    */
   fastify.get(
     '/process/:processId',
+    {
+      schema: { params: processIdParamSchema },
+      preHandler: [requirePermission('sop', 'read')],
+    },
     async (
       request: FastifyRequest<{ Params: { processId: string } }>,
       reply: FastifyReply
@@ -137,9 +233,14 @@ export async function sopRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * Update SOP draft
    * PATCH /api/v1/sop/:id
+   * Requires: sop.update permission (ANALYST role minimum)
    */
   fastify.patch(
     '/:id',
+    {
+      schema: { params: idParamSchema, body: updateSopSchema },
+      preHandler: [requirePermission('sop', 'update')],
+    },
     async (
       request: FastifyRequest<{ Params: { id: string }; Body: UpdateSopBody }>,
       reply: FastifyReply
@@ -172,9 +273,14 @@ export async function sopRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * Submit SOP for review
    * POST /api/v1/sop/:id/submit
+   * Requires: sop.update permission (ANALYST role minimum)
    */
   fastify.post(
     '/:id/submit',
+    {
+      schema: { params: idParamSchema },
+      preHandler: [requirePermission('sop', 'update')],
+    },
     async (
       request: FastifyRequest<{ Params: { id: string } }>,
       reply: FastifyReply
@@ -209,9 +315,14 @@ export async function sopRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * Review SOP (approve/reject)
    * POST /api/v1/sop/:id/review
+   * Requires: sop.update permission (ANALYST role minimum)
    */
   fastify.post(
     '/:id/review',
+    {
+      schema: { params: idParamSchema, body: reviewSchema },
+      preHandler: [requirePermission('sop', 'update')],
+    },
     async (
       request: FastifyRequest<{ Params: { id: string }; Body: ReviewBody }>,
       reply: FastifyReply
@@ -252,9 +363,14 @@ export async function sopRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * Publish approved SOP
    * POST /api/v1/sop/:id/publish
+   * Requires: sop.update permission (ANALYST role minimum)
    */
   fastify.post(
     '/:id/publish',
+    {
+      schema: { params: idParamSchema },
+      preHandler: [requirePermission('sop', 'update')],
+    },
     async (
       request: FastifyRequest<{ Params: { id: string } }>,
       reply: FastifyReply
@@ -287,9 +403,14 @@ export async function sopRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * Create new version of SOP
    * POST /api/v1/sop/:id/version
+   * Requires: sop.create permission (ANALYST role minimum)
    */
   fastify.post(
     '/:id/version',
+    {
+      schema: { params: idParamSchema, body: versionSchema },
+      preHandler: [requirePermission('sop', 'create')],
+    },
     async (
       request: FastifyRequest<{
         Params: { id: string };
@@ -327,9 +448,14 @@ export async function sopRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * Get SOP completeness score
    * GET /api/v1/sop/:id/completeness
+   * Requires: sop.read permission (VIEWER role minimum)
    */
   fastify.get(
     '/:id/completeness',
+    {
+      schema: { params: idParamSchema },
+      preHandler: [requirePermission('sop', 'read')],
+    },
     async (
       request: FastifyRequest<{ Params: { id: string } }>,
       reply: FastifyReply

@@ -3,12 +3,10 @@
  * T043 - Create escalation handler
  */
 
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../../lib/prisma.js';
 import { logger } from '../../lib/logger.js';
 import { checkAvailability } from './availabilityChecker.js';
 import { checkWorkloadCapacity } from './workloadBalancer.js';
-
-const prisma = new PrismaClient();
 
 // =============================================================================
 // Types

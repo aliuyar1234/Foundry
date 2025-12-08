@@ -5,7 +5,7 @@
  * Uses multiple signals to identify early warning signs of burnout
  */
 
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../../lib/prisma.js';
 
 // =============================================================================
 // Types
@@ -78,8 +78,6 @@ const RISK_THRESHOLDS = {
 // =============================================================================
 // Burnout Predictor
 // =============================================================================
-
-const prisma = new PrismaClient();
 
 /**
  * Predict burnout risk for a single person

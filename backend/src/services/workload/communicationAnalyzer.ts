@@ -5,7 +5,7 @@
  * Detects unhealthy communication patterns that may lead to burnout
  */
 
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../../lib/prisma.js';
 
 // =============================================================================
 // Types
@@ -137,8 +137,6 @@ const HEALTH_THRESHOLDS = {
 // =============================================================================
 // Communication Analyzer
 // =============================================================================
-
-const prisma = new PrismaClient();
 
 /**
  * Analyze communication patterns for a person

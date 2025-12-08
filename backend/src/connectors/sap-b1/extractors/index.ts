@@ -12,6 +12,13 @@ import {
 } from '../sapClient.js';
 import { ExtractedEvent } from '../../base/connector.js';
 
+// Re-export specialized extractors
+export * from './businessPartners.js';
+export * from './documents.js';
+export * from './items.js';
+export * from './approvals.js';
+export * from './attachments.js';
+
 export interface SapExtractionOptions {
   organizationId: string;
   lookbackDate?: Date;

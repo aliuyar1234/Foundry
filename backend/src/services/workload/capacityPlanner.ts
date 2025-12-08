@@ -5,7 +5,7 @@
  * Helps teams plan capacity and identify resource constraints
  */
 
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../../lib/prisma.js';
 
 // =============================================================================
 // Types
@@ -102,8 +102,6 @@ export interface CapacityScenario {
 // =============================================================================
 // Capacity Planner
 // =============================================================================
-
-const prisma = new PrismaClient();
 
 /**
  * Create capacity plan for a team

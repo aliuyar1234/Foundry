@@ -264,3 +264,8 @@ export * from './gmailClient.js';
 export * from './calendarClient.js';
 export * from './driveClient.js';
 export * from './deltaSync.js';
+
+// New exports for enhanced connector framework (T016-T019)
+export * from './clientFactory.js';
+export * from './domainDelegation.js';
+export * from './tokenRefresh.js';

@@ -4,13 +4,11 @@
  * T283 - Conflict resolution service
  */
 
-import { PrismaClient } from '@prisma/client';
 import { v4 as uuidv4 } from 'uuid';
 import { getSsotConfig } from './ssotConfig.js';
 import { getMasterRecord, updateMasterRecord, MasterRecord } from './masterRecordService.js';
 import { trackChange } from './changeTracker.js';
-
-const prisma = new PrismaClient();
+import { prisma } from '../../lib/prisma.js';
 
 export type ConflictStatus = 'pending' | 'resolved' | 'ignored' | 'escalated';
 export type ConflictType = 'field_value' | 'record_existence' | 'relationship' | 'schema';

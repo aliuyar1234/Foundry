@@ -4,7 +4,7 @@
  */
 
 import { Job } from 'bullmq';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../../lib/prisma.js';
 import {
   calculateERPReadiness,
   calculateAIReadiness,
@@ -17,8 +17,6 @@ import {
   type ProcessMaturityInput,
   type CombinedAssessmentInput,
 } from '../../services/reporting/assessments/index.js';
-
-const prisma = new PrismaClient();
 
 export interface AssessmentJobData {
   assessmentId: string;

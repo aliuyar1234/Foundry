@@ -4,15 +4,13 @@
  * T307 - Company data enrichment (UID, executives, etc.)
  */
 
-import { PrismaClient } from '@prisma/client';
 import {
   RegistryClient,
   createRegistryClient,
   CompanyRegistryData,
   Executive,
 } from './registryClient.js';
-
-const prisma = new PrismaClient();
+import { prisma } from '../../lib/prisma.js';
 
 export interface EnrichmentRequest {
   entityId: string;

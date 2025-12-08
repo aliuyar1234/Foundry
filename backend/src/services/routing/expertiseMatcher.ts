@@ -3,11 +3,9 @@
  * T035 - Create expertise profile builder and matcher
  */
 
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../../lib/prisma.js';
 import { logger } from '../../lib/logger.js';
 import { findExpertsBySkill, findExpertsByDomain, getExpertiseProfile } from '../operate/expertiseGraph.js';
-
-const prisma = new PrismaClient();
 
 // =============================================================================
 // Types

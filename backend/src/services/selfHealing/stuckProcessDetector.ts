@@ -5,7 +5,6 @@
  * Detects processes that have stopped progressing or are taking too long
  */
 
-import { PrismaClient } from '@prisma/client';
 import { logger } from '../../lib/logger.js';
 import {
   registerDetector,
@@ -13,8 +12,7 @@ import {
   mergePatterns,
 } from './patternDetector.js';
 import type { DetectedPattern, AffectedEntity } from 'shared/types/selfHealing.js';
-
-const prisma = new PrismaClient();
+import { prisma } from '../../lib/prisma.js';
 
 // =============================================================================
 // Types

@@ -205,3 +205,128 @@ function getErrorCode(statusCode: number): string {
   };
   return codes[statusCode] || 'UNKNOWN_ERROR';
 }
+
+// =============================================================================
+// Helper Functions for Safe Error Responses
+// SECURITY: These helpers ensure internal error details are never exposed
+// =============================================================================
+
+/**
+ * Generic error messages for different error categories
+ * Use these instead of exposing raw error.message
+ */
+export const SAFE_ERROR_MESSAGES = {
+  internal: 'An internal server error occurred',
+  database: 'A database operation failed',
+  external: 'An external service is unavailable',
+  connector: 'Failed to connect to external system',
+  validation: 'Request validation failed',
+  auth: 'Authentication failed',
+  permission: 'You do not have permission to perform this action',
+  notFound: 'The requested resource was not found',
+  conflict: 'A conflict occurred with the current state',
+  rateLimit: 'Too many requests, please try again later',
+  timeout: 'The operation timed out',
+};
+
+/**
+ * Sanitize an error for client response
+ * SECURITY: Always use this instead of error.message in 5xx responses
+ */
+export function sanitizeErrorMessage(error: Error | unknown): string {
+  if (!(error instanceof Error)) {
+    return SAFE_ERROR_MESSAGES.internal;
+  }
+
+  const msg = error.message.toLowerCase();
+  const name = error.name.toLowerCase();
+
+  // Database errors
+  if (
+    name.includes('prisma') ||
+    msg.includes('database') ||
+    msg.includes('connection refused') ||
+    msg.includes('econnrefused')
+  ) {
+    return SAFE_ERROR_MESSAGES.database;
+  }
+
+  // External service errors
+  if (
+    msg.includes('fetch failed') ||
+    msg.includes('socket') ||
+    msg.includes('network') ||
+    msg.includes('timeout')
+  ) {
+    return SAFE_ERROR_MESSAGES.external;
+  }
+
+  // Connector/integration errors
+  if (
+    msg.includes('connector') ||
+    msg.includes('oauth') ||
+    msg.includes('credential')
+  ) {
+    return SAFE_ERROR_MESSAGES.connector;
+  }
+
+  // Default to generic internal error
+  return SAFE_ERROR_MESSAGES.internal;
+}
+
+/**
+ * Create a safe 500 error response
+ * SECURITY: Logs full error server-side, returns sanitized message to client
+ */
+export function sendSafeError(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  error: Error | unknown,
+  context?: string
+): FastifyReply {
+  // Log full error details server-side
+  request.log.error(
+    {
+      error: error instanceof Error ? {
+        name: error.name,
+        message: error.message,
+        stack: error.stack,
+      } : error,
+      context,
+    },
+    context || 'Operation failed'
+  );
+
+  // Return sanitized response to client
+  const safeMessage = sanitizeErrorMessage(error);
+
+  return reply.status(500).send({
+    error: 'Internal Server Error',
+    message: safeMessage,
+    code: 'INTERNAL_ERROR',
+    requestId: request.id,
+    timestamp: new Date().toISOString(),
+  });
+}
+
+/**
+ * Create a safe 503 service unavailable response
+ */
+export function sendServiceError(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  error: Error | unknown,
+  serviceName?: string
+): FastifyReply {
+  request.log.error({ error, service: serviceName }, 'Service unavailable');
+
+  return reply.status(503).send({
+    error: 'Service Unavailable',
+    message: serviceName
+      ? `${serviceName} is temporarily unavailable`
+      : SAFE_ERROR_MESSAGES.external,
+    code: 'SERVICE_UNAVAILABLE',
+    requestId: request.id,
+    timestamp: new Date().toISOString(),
+  });
+}

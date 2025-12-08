@@ -4,9 +4,7 @@
  * T298 - Works council compatible reporting
  */
 
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { prisma } from '../../lib/prisma.js';
 
 export interface AggregationConfig {
   minGroupSize: number; // Minimum individuals before data can be shown (default: 5 for k-anonymity)

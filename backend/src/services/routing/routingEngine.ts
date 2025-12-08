@@ -3,7 +3,7 @@
  * T031 - Main routing engine that orchestrates request routing
  */
 
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../../lib/prisma.js';
 import { logger } from '../../lib/logger.js';
 import { categorizeRequest, CategoryResult } from './requestCategorizer.js';
 import { matchRules, RuleMatch } from './ruleMatcher.js';
@@ -20,8 +20,6 @@ import {
   RoutingAnalysisResult,
   AlternativeHandler,
 } from '@foundry/shared';
-
-const prisma = new PrismaClient();
 
 // =============================================================================
 // Types

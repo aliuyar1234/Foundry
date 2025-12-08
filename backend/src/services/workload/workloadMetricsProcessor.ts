@@ -6,7 +6,7 @@
  */
 
 import { Queue, Worker, Job } from 'bullmq';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../../lib/prisma.js';
 import { predictBurnout } from './burnoutPredictor.js';
 import { calculateBurnoutScore } from './burnoutScorer.js';
 import { checkForWarnings, checkTeamWarnings } from './earlyWarning.js';
@@ -66,8 +66,6 @@ const REDIS_CONFIG = {
   host: process.env.REDIS_HOST || 'localhost',
   port: parseInt(process.env.REDIS_PORT || '6379'),
 };
-
-const prisma = new PrismaClient();
 
 // Job type configurations
 const JOB_CONFIGS: Record<WorkloadJobType, { priority: number; attempts: number; backoff: number }> = {

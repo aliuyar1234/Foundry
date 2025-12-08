@@ -3,15 +3,13 @@
  * Implements hybrid search (vector + keyword) with permission filtering
  */
 
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../../lib/prisma.js';
 import { getQdrantService, QdrantService, SearchFilter, SearchOptions } from './qdrant.service.js';
 import { getEmbeddingService, EmbeddingService } from './embedding.service.js';
 import { generateCompletion } from '../../lib/anthropic.js';
 import { logger } from '../../lib/logger.js';
 import type { VectorSearchResult, VectorPayload } from '../../models/Embedding.js';
 import { SourceType } from '../../models/Embedding.js';
-
-const prisma = new PrismaClient();
 
 /**
  * Search result with enriched metadata

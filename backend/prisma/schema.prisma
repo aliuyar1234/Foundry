@@ -1149,3 +1149,193 @@ model BenchmarkOptIn {
 
   @@index([isOptedIn])
 }
+
+// -----------------------------------------------------------------------------
+// Additional Connectors Models (004-additional-connectors)
+// -----------------------------------------------------------------------------
+
+// T008: ConnectorInstance model - tracks individual connector configurations
+model ConnectorInstance {
+  id                String                @id @default(cuid())
+  connectorType     String                // 'google_workspace', 'odoo', 'sap_b1', etc.
+  name              String
+  organizationId    String
+  status            ConnectorStatus       @default(PENDING_SETUP)
+  configuration     Json                  @default("{}")
+  lastHealthCheck   DateTime?
+  healthStatus      HealthStatus          @default(UNKNOWN)
+  errorMessage      String?
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+
+  syncJobs          ConnectorSyncJob[]
+  checkpoints       SyncCheckpoint[]
+  credentials       ConnectorCredential[]
+  errors            ConnectorError[]
+  rateLimitStates   RateLimitState[]
+  entityMappings    EntityMapping[]
+
+  @@index([organizationId])
+  @@index([connectorType])
+  @@index([status])
+}
+
+// T008: ConnectorStatus enum
+enum ConnectorStatus {
+  PENDING_SETUP
+  CONFIGURING
+  AUTHENTICATING
+  CONNECTED
+  SYNCING
+  PAUSED
+  ERROR
+  DISABLED
+}
+
+// T008: HealthStatus enum
+enum HealthStatus {
+  UNKNOWN
+  HEALTHY
+  DEGRADED
+  UNHEALTHY
+  DISCONNECTED
+}
+
+// T008: ConnectorSyncJob model - tracks sync operations
+model ConnectorSyncJob {
+  id                String            @id @default(cuid())
+  instanceId        String
+  syncType          SyncType          @default(INCREMENTAL)
+  status            ConnectorJobStatus @default(PENDING)
+  startedAt         DateTime?
+  completedAt       DateTime?
+  progress          Int               @default(0)  // 0-100
+  eventsProcessed   Int               @default(0)
+  errorsCount       Int               @default(0)
+  errorMessage      String?           @db.Text
+  metadata          Json              @default("{}")
+  createdAt         DateTime          @default(now())
+
+  instance          ConnectorInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+
+  @@index([instanceId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+// T008: SyncType enum
+enum SyncType {
+  FULL
+  INCREMENTAL
+  SELECTIVE
+  REPAIR
+}
+
+// T008: ConnectorJobStatus enum
+enum ConnectorJobStatus {
+  PENDING
+  INITIALIZING
+  RUNNING
+  PAUSED
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+// T008: SyncCheckpoint model - tracks sync progress for resume capability
+model SyncCheckpoint {
+  id                String            @id @default(cuid())
+  instanceId        String
+  resource          String            // e.g., 'emails', 'calendar', 'files'
+  cursor            String?           // API cursor/page token
+  timestamp         DateTime          // Last processed timestamp
+  processedCount    Int               @default(0)
+  metadata          Json              @default("{}")
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  instance          ConnectorInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+
+  @@unique([instanceId, resource])
+  @@index([instanceId])
+}
+
+// T009: ConnectorCredential model - stores encrypted credentials
+model ConnectorCredential {
+  id                String            @id @default(cuid())
+  instanceId        String
+  credentialType    String            // 'oauth_tokens', 'api_key', 'session_token', etc.
+  encryptedData     String            @db.Text  // AES-256-GCM encrypted JSON
+  keyId             String            // Reference to encryption key
+  version           Int               @default(1)
+  expiresAt         DateTime?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  instance          ConnectorInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+
+  @@unique([instanceId, credentialType])
+  @@index([instanceId])
+  @@index([expiresAt])
+}
+
+// T009: EntityMapping model - maps external entities to internal entities
+model EntityMapping {
+  id                String            @id @default(cuid())
+  instanceId        String
+  externalId        String            // ID in source system
+  externalType      String            // Type in source system (e.g., 'gmail_message', 'odoo_sale_order')
+  internalId        String?           // ID in our system (if resolved)
+  internalType      String?           // Type in our system
+  metadata          Json              @default("{}")
+  lastSyncedAt      DateTime?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  instance          ConnectorInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+
+  @@unique([instanceId, externalType, externalId])
+  @@index([instanceId])
+  @@index([internalId])
+}
+
+// T010: ConnectorError model - logs connector errors for debugging
+model ConnectorError {
+  id                String            @id @default(cuid())
+  instanceId        String
+  errorCode         String
+  errorType         String            // 'auth', 'rate_limit', 'sync', 'api', 'config'
+  message           String            @db.Text
+  stackTrace        String?           @db.Text
+  context           Json              @default("{}")  // Additional context (request params, etc.)
+  isResolved        Boolean           @default(false)
+  resolvedAt        DateTime?
+  resolvedBy        String?
+  createdAt         DateTime          @default(now())
+
+  instance          ConnectorInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+
+  @@index([instanceId, createdAt])
+  @@index([errorType])
+  @@index([isResolved])
+}
+
+// T010: RateLimitState model - tracks API rate limit states
+model RateLimitState {
+  id                String            @id @default(cuid())
+  instanceId        String
+  endpoint          String            // API endpoint or category
+  windowType        String            // 'second', 'minute', 'hour', 'day'
+  limit             Int               // Max requests in window
+  remaining         Int               // Remaining requests
+  resetsAt          DateTime
+  lastRequestAt     DateTime
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  instance          ConnectorInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+
+  @@unique([instanceId, endpoint, windowType])
+  @@index([instanceId])
+  @@index([resetsAt])
+}

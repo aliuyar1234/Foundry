@@ -5,7 +5,7 @@
  * Sends targeted notifications to managers about team issues
  */
 
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../../lib/prisma.js';
 import { EventEmitter } from 'events';
 
 // =============================================================================
@@ -107,7 +107,6 @@ export interface NotificationStats {
 // Manager Notifier
 // =============================================================================
 
-const prisma = new PrismaClient();
 const notificationEmitter = new EventEmitter();
 
 // In-memory notification queue (would be database/queue in production)

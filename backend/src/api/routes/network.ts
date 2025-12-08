@@ -6,8 +6,8 @@
 
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
-import { PrismaClient } from '@prisma/client';
 import { Pool } from 'pg';
+import { prisma } from '../../lib/prisma.js';
 import {
   buildCommunicationNetwork,
   buildEgoNetwork,
@@ -101,7 +101,6 @@ const analysisJobSchema = z.object({
 
 export default async function networkRoutes(fastify: FastifyInstance) {
   const pool = new Pool({ connectionString: process.env.TIMESCALE_URL });
-  const prisma = new PrismaClient();
 
   // ==================== NETWORK OVERVIEW ENDPOINTS ====================
 

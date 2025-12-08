@@ -5,7 +5,7 @@
  * Detects failing external integrations and connectivity issues
  */
 
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../../lib/prisma.js';
 import { logger } from '../../lib/logger.js';
 import {
   registerDetector,
@@ -13,8 +13,6 @@ import {
   mergePatterns,
 } from './patternDetector.js';
 import type { DetectedPattern, AffectedEntity } from 'shared/types/selfHealing.js';
-
-const prisma = new PrismaClient();
 
 // =============================================================================
 // Types

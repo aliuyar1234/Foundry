@@ -3,12 +3,13 @@
  */
 
 import Fastify, { FastifyInstance } from 'fastify';
-import { PrismaClient } from '@prisma/client';
 import pino from 'pino';
 import { registerRoutes } from './api/routes/index.js';
+import { prisma, connectPrisma, disconnectPrisma } from './lib/prisma.js';
+import { securityMiddleware } from './api/middleware/securityHeaders.js';
 
-// Create Prisma client
-export const prisma = new PrismaClient();
+// Re-export prisma for backwards compatibility
+export { prisma };
 
 // Create logger
 const logger = pino({
@@ -96,23 +97,8 @@ export function buildServer(): FastifyInstance {
     }
   });
 
-  // Register CORS
-  server.addHook('onRequest', async (request, reply) => {
-    const origin = request.headers.origin;
-    const allowedOrigins = (process.env.CORS_ORIGINS || 'http://localhost:3000').split(',');
-
-    if (origin && allowedOrigins.includes(origin)) {
-      reply.header('Access-Control-Allow-Origin', origin);
-    }
-
-    reply.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-    reply.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-    reply.header('Access-Control-Allow-Credentials', 'true');
-
-    if (request.method === 'OPTIONS') {
-      reply.code(204).send();
-    }
-  });
+  // Register security middleware (CORS + CSP + security headers)
+  server.addHook('onRequest', securityMiddleware);
 
   // Register routes
   registerRoutes(server);
@@ -128,8 +114,8 @@ async function start() {
   const host = process.env.API_HOST || '0.0.0.0';
 
   try {
-    // Connect to database
-    await prisma.$connect();
+    // Connect to database using singleton
+    await connectPrisma();
     logger.info('Connected to database');
 
     // Start server
@@ -137,7 +123,7 @@ async function start() {
     logger.info(`Server listening on ${host}:${port}`);
   } catch (error) {
     logger.error(error, 'Failed to start server');
-    await prisma.$disconnect();
+    await disconnectPrisma();
     process.exit(1);
   }
 
@@ -147,7 +133,7 @@ async function start() {
 
     try {
       await server.close();
-      await prisma.$disconnect();
+      await disconnectPrisma();
       logger.info('Server shut down successfully');
       process.exit(0);
     } catch (error) {

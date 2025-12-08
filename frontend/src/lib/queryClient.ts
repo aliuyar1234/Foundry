@@ -74,4 +74,21 @@ export const queryKeys = {
   users: (orgId: string) => [...queryKeys.organization(orgId), 'users'] as const,
   user: (id: string) => [...queryKeys.all, 'users', id] as const,
   currentUser: () => [...queryKeys.all, 'currentUser'] as const,
+
+  // Connectors
+  connectors: (orgId: string) => [...queryKeys.organization(orgId), 'connectors'] as const,
+  connector: (orgId: string, id: string) => [...queryKeys.connectors(orgId), id] as const,
+  connectorSyncJobs: (orgId: string, id: string) =>
+    [...queryKeys.connector(orgId, id), 'syncJobs'] as const,
+  connectorSyncJob: (orgId: string, connectorId: string, jobId: string) =>
+    [...queryKeys.connectorSyncJobs(orgId, connectorId), jobId] as const,
+  connectorErrors: (orgId: string, id: string) =>
+    [...queryKeys.connector(orgId, id), 'errors'] as const,
+  connectorError: (orgId: string, connectorId: string, errorId: string) =>
+    [...queryKeys.connectorErrors(orgId, connectorId), errorId] as const,
+  connectorHealth: (orgId: string, id: string) =>
+    [...queryKeys.connector(orgId, id), 'health'] as const,
+  connectorStats: (orgId: string, id: string) =>
+    [...queryKeys.connector(orgId, id), 'stats'] as const,
+  availableConnectors: () => [...queryKeys.all, 'connectors', 'available'] as const,
 };

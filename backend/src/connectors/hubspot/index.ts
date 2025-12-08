@@ -298,3 +298,9 @@ export class HubSpotConnector extends BaseConnector {
 // Export types and utilities
 export * from './hubspotClient.js';
 export * from './extractors/index.js';
+
+// Export additional modules
+export * from './customPropertyDiscovery.js';
+export * from './associationMapper.js';
+export * from './incrementalSync.js';
+export * from './eventNormalizer.js';

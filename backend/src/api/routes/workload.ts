@@ -5,7 +5,7 @@
 
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../../lib/prisma.js';
 
 // Service imports
 import {
@@ -171,7 +171,6 @@ const capacityScenarioSchema = z.object({
 // =============================================================================
 
 export default async function workloadRoutes(fastify: FastifyInstance) {
-  const prisma = new PrismaClient();
 
   // ==================== PERSON WORKLOAD ENDPOINTS ====================
 

@@ -5,7 +5,7 @@
  * Identifies unhealthy response time patterns and expectations
  */
 
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../../lib/prisma.js';
 
 // =============================================================================
 // Types
@@ -127,8 +127,6 @@ const CHANNEL_SLAS: Record<string, number> = {
 // =============================================================================
 // Response Time Analyzer
 // =============================================================================
-
-const prisma = new PrismaClient();
 
 /**
  * Analyze response time patterns for a person

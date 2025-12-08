@@ -5,7 +5,7 @@
  * Escalates issues through defined escalation chains
  */
 
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../../../lib/prisma.js';
 import { logger } from '../../../lib/logger.js';
 import { registerActionExecutor } from '../actionExecutor.js';
 import type {
@@ -19,8 +19,6 @@ import type {
   ActionExecutionResult,
   ValidationResult,
 } from '../actionExecutor.js';
-
-const prisma = new PrismaClient();
 
 // =============================================================================
 // Types

@@ -3,13 +3,11 @@
  * T045 - Create backup handler selector
  */
 
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../../lib/prisma.js';
 import { logger } from '../../lib/logger.js';
 import { checkAvailability } from './availabilityChecker.js';
 import { checkWorkloadCapacity } from './workloadBalancer.js';
 import { findExpertsBySkill, getExpertiseProfile } from '../operate/expertiseGraph.js';
-
-const prisma = new PrismaClient();
 
 // =============================================================================
 // Types

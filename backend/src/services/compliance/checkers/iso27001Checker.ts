@@ -5,11 +5,9 @@
  * Specialized compliance checks for ISO 27001 Information Security requirements
  */
 
-import { PrismaClient } from '@prisma/client';
 import type { EvaluationFinding, RuleEvaluationContext } from '../ruleEngine.js';
 import { registerCustomEvaluator } from '../ruleEngine.js';
-
-const prisma = new PrismaClient();
+import { prisma } from '../../../lib/prisma.js';
 
 // =============================================================================
 // Types

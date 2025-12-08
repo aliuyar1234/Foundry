@@ -9,11 +9,26 @@ import { logger } from '../../lib/logger.js';
 // Get Neo4j driver from existing setup
 let driver: Driver | null = null;
 
+/**
+ * Get Neo4j driver for expertise graph
+ * SECURITY: Fails fast if credentials are not configured - no default passwords
+ */
 export function getDriver(): Driver {
   if (!driver) {
-    const uri = process.env.NEO4J_URI || 'bolt://localhost:7687';
-    const user = process.env.NEO4J_USER || 'neo4j';
-    const password = process.env.NEO4J_PASSWORD || 'password';
+    const uri = process.env.NEO4J_URI;
+    const user = process.env.NEO4J_USER || process.env.NEO4J_USERNAME;
+    const password = process.env.NEO4J_PASSWORD;
+
+    // SECURITY: Fail fast if credentials are missing
+    if (!uri) {
+      throw new Error('NEO4J_URI environment variable is required');
+    }
+    if (!user) {
+      throw new Error('NEO4J_USER or NEO4J_USERNAME environment variable is required');
+    }
+    if (!password) {
+      throw new Error('NEO4J_PASSWORD environment variable is required');
+    }
 
     driver = neo4j.driver(uri, neo4j.auth.basic(user, password), {
       maxConnectionPoolSize: 50,

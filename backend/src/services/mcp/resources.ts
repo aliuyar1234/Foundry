@@ -3,12 +3,10 @@
  * Provides access to organizational resources for AI assistants
  */
 
-import { PrismaClient } from '@prisma/client';
 import { runQuery } from '../../graph/connection.js';
 import { logger } from '../../lib/logger.js';
 import type { McpResource, McpContent } from '../../lib/mcp-types.js';
-
-const prisma = new PrismaClient();
+import { prisma } from '../../lib/prisma.js';
 
 /**
  * Resource URI patterns

@@ -7,7 +7,7 @@
  * Learns from pattern occurrences and suggests resolutions
  */
 
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../../lib/prisma.js';
 import { logger } from '../../lib/logger.js';
 import type {
   PatternType,
@@ -16,8 +16,6 @@ import type {
   ResolutionSuggestion,
   AutomatedAction,
 } from 'shared/types/selfHealing.js';
-
-const prisma = new PrismaClient();
 
 // =============================================================================
 // Types

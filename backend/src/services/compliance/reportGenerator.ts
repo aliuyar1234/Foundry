@@ -5,7 +5,7 @@
  * Generates various compliance reports and audit documentation
  */
 
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../../lib/prisma.js';
 import type {
   ComplianceReport,
   ComplianceReportType,
@@ -18,8 +18,6 @@ import { getComplianceSummary } from './ruleEngine.js';
 import { getViolationStatistics, getViolations } from './violationDetector.js';
 import { getAllEvidenceCollections } from './evidenceCollector.js';
 import { getDeadlineSchedule, getDeadlineStatistics } from './deadlineTracker.js';
-
-const prisma = new PrismaClient();
 
 // =============================================================================
 // Types

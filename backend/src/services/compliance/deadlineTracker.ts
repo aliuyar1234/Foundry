@@ -5,13 +5,11 @@
  * Tracks compliance deadlines and sends alerts
  */
 
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../../lib/prisma.js';
 import type {
   ComplianceDeadline,
   ComplianceFramework,
 } from 'shared/types/compliance.js';
-
-const prisma = new PrismaClient();
 
 // =============================================================================
 // Types

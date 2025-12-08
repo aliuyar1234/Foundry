@@ -3,7 +3,7 @@
  * Compares ongoing process behavior against documented SOPs
  */
 
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../../../lib/prisma.js';
 import { ProcessData, ProcessStepData } from './inputFormatter.js';
 
 export interface DeviationReport {
@@ -82,12 +82,14 @@ const DEFAULT_CONFIG: DeviationDetectorConfig = {
 };
 
 export class DeviationDetector {
-  private prisma: PrismaClient;
   private config: DeviationDetectorConfig;
 
-  constructor(prisma?: PrismaClient, config: Partial<DeviationDetectorConfig> = {}) {
-    this.prisma = prisma || new PrismaClient();
+  constructor(config: Partial<DeviationDetectorConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
+  }
+
+  private get db() {
+    return prisma;
   }
 
   /**
@@ -98,7 +100,7 @@ export class DeviationDetector {
     currentProcessData: ProcessData
   ): Promise<DeviationReport> {
     // Fetch SOP
-    const sop = await this.prisma.sOP.findUnique({
+    const sop = await this.db.sOP.findUnique({
       where: { id: sopId },
       include: {
         process: true,

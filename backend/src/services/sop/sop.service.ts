@@ -3,7 +3,8 @@
  * Core service for automated SOP generation and management
  */
 
-import { PrismaClient, SopDraftStatus } from '@prisma/client';
+import { SopDraftStatus } from '@prisma/client';
+import { prisma } from '../../lib/prisma.js';
 import { logger } from '../../lib/logger.js';
 import { getAnthropicClient } from '../../lib/anthropic.js';
 import { getEmbeddingService } from '../vector/embedding.service.js';
@@ -23,8 +24,6 @@ import type {
   incrementVersion,
   calculateCompletenessScore,
 } from '../../models/SopDraft.js';
-
-const prisma = new PrismaClient();
 
 /**
  * SOP generation and management service

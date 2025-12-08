@@ -18,6 +18,17 @@ export const QueueNames = {
   RETENTION: 'retention',
   AGGREGATE_REFRESH: 'aggregate-refresh',
   NETWORK_ANALYSIS: 'network-analysis',
+  DOCUWARE_SYNC: 'docuware-sync',
+  MFILES_SYNC: 'mfiles-sync',
+  GOOGLE_SYNC: 'google-sync',
+  SALESFORCE_SYNC: 'salesforce-sync',
+  HUBSPOT_SYNC: 'hubspot-sync',
+  SLACK_SYNC: 'slack-sync',
+  DATEV_SYNC: 'datev-sync',
+  BMD_SYNC: 'bmd-sync',
+  BMD_IMPORT: 'bmd-import',
+  ODOO_SYNC: 'odoo-sync',
+  SAP_SYNC: 'sap-sync',
 } as const;
 
 export type QueueName = (typeof QueueNames)[keyof typeof QueueNames];

@@ -5,7 +5,7 @@
 
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../../lib/prisma.js';
 import { logger } from '../../lib/logger.js';
 import {
   routeRequest,
@@ -33,7 +33,6 @@ import {
 import { broadcastRoutingDecision } from '../../lib/sse/sseManager.js';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 // =============================================================================
 // Validation Schemas

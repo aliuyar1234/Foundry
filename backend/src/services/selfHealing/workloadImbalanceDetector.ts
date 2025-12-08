@@ -5,7 +5,6 @@
  * Detects uneven workload distribution across team members
  */
 
-import { PrismaClient } from '@prisma/client';
 import { logger } from '../../lib/logger.js';
 import {
   registerDetector,
@@ -13,8 +12,7 @@ import {
   mergePatterns,
 } from './patternDetector.js';
 import type { DetectedPattern, AffectedEntity } from 'shared/types/selfHealing.js';
-
-const prisma = new PrismaClient();
+import { prisma } from '../../lib/prisma.js';
 
 // =============================================================================
 // Types

@@ -3,11 +3,9 @@
  * T075 - Create permission-aware context filter
  */
 
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../../lib/prisma.js';
 import { logger } from '../../lib/logger.js';
 import { type RetrievedContext } from './contextRetriever.js';
-
-const prisma = new PrismaClient();
 
 // =============================================================================
 // Types

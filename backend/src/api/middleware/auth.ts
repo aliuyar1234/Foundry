@@ -1,10 +1,12 @@
 /**
  * JWT Authentication Middleware
  * Validates JWT tokens and extracts user information
+ * Includes token revocation checks for security hardening
  */
 
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { jwtVerify, createRemoteJWKSet, JWTPayload } from 'jose';
+import { tokenRevocationService } from '../../services/security/tokenRevocation.js';
 
 export interface AuthUser {
   id: string;
@@ -13,6 +15,10 @@ export interface AuthUser {
   role: string;
   organizationId: string;
   authProviderId: string;
+  /** JWT ID for revocation tracking */
+  jti?: string;
+  /** Token issued-at timestamp */
+  iat?: number;
 }
 
 export interface AuthenticatedRequest extends FastifyRequest {
@@ -83,6 +89,10 @@ export async function authenticate(
 
     const payload = await verifyToken(token);
 
+    // Extract JWT ID and issued-at for revocation checks
+    const jti = payload.jti || '';
+    const iat = payload.iat || 0;
+
     // Extract user information from token claims
     const user: AuthUser = {
       id: payload.sub || '',
@@ -91,6 +101,8 @@ export async function authenticate(
       role: (payload['https://eaif.com/role'] as string) || 'VIEWER',
       organizationId: (payload['https://eaif.com/organizationId'] as string) || '',
       authProviderId: payload.sub || '',
+      jti,
+      iat,
     };
 
     // Validate required claims
@@ -100,6 +112,40 @@ export async function authenticate(
         message: 'Invalid token claims',
       });
       return;
+    }
+
+    // Check token revocation status (Redis-backed blacklist)
+    // Security policy (FAIL_CLOSED/FAIL_OPEN) is configured in tokenRevocationService
+    if (jti && iat) {
+      const revocationCheck = await tokenRevocationService.isTokenValid(
+        jti,
+        user.id,
+        user.organizationId,
+        iat
+      );
+
+      if (!revocationCheck.valid) {
+        const logLevel = revocationCheck.redisError ? 'error' : 'warn';
+        request.log[logLevel](
+          { userId: user.id, jti, reason: revocationCheck.reason, redisError: revocationCheck.redisError },
+          revocationCheck.redisError ? 'Token revocation check failed - Redis unavailable' : 'Revoked token used'
+        );
+
+        const message = revocationCheck.reason === 'revocation_check_unavailable'
+          ? 'Authentication service temporarily unavailable'
+          : 'Token has been revoked';
+
+        reply.code(401).send({
+          error: 'Unauthorized',
+          message,
+        });
+        return;
+      }
+
+      // Update session activity (non-blocking)
+      tokenRevocationService.updateSessionActivity(user.id, jti).catch(() => {
+        // Ignore errors - non-critical operation
+      });
     }
 
     // Attach user to request

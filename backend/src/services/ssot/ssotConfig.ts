@@ -4,9 +4,7 @@
  * T280 - SSOT mode configuration
  */
 
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { prisma } from '../../lib/prisma.js';
 
 export type SsotMode = 'disabled' | 'shadow' | 'active' | 'primary';
 

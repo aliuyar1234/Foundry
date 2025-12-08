@@ -5,7 +5,7 @@
  * Connects to calendar APIs to analyze time allocation
  */
 
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../../lib/prisma.js';
 
 // =============================================================================
 // Types
@@ -112,8 +112,6 @@ export interface CalendarConnection {
 // =============================================================================
 // Calendar Integration
 // =============================================================================
-
-const prisma = new PrismaClient();
 
 // In-memory cache for calendar data (would be database in production)
 const calendarCache = new Map<string, CalendarEvent[]>();

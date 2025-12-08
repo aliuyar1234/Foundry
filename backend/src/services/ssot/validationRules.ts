@@ -4,11 +4,9 @@
  * T285 - Validation rules engine
  */
 
-import { PrismaClient } from '@prisma/client';
 import { v4 as uuidv4 } from 'uuid';
 import { MasterRecord } from './masterRecordService.js';
-
-const prisma = new PrismaClient();
+import { prisma } from '../../lib/prisma.js';
 
 export type RuleType =
   | 'required'

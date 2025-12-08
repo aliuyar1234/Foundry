@@ -3,11 +3,9 @@
  * T033 - Create routing rule matcher
  */
 
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../../lib/prisma.js';
 import { logger } from '../../lib/logger.js';
 import { RequestCriteria, RouteHandler } from '@foundry/shared';
-
-const prisma = new PrismaClient();
 
 // =============================================================================
 // Types

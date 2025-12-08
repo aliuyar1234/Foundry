@@ -5,11 +5,9 @@
  * Allows organizations to define custom compliance rules
  */
 
-import { PrismaClient } from '@prisma/client';
 import type { EvaluationFinding, RuleEvaluationContext } from './ruleEngine.js';
 import { registerCustomEvaluator } from './ruleEngine.js';
-
-const prisma = new PrismaClient();
+import { prisma } from '../../lib/prisma.js';
 
 // =============================================================================
 // Types

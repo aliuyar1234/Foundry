@@ -5,7 +5,7 @@
  * Core engine for evaluating compliance rules against organizational data
  */
 
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../../lib/prisma.js';
 import type {
   ComplianceRule,
   RuleLogic,
@@ -21,8 +21,6 @@ import type {
   CheckFrequency,
   Severity,
 } from 'shared/types/compliance.js';
-
-const prisma = new PrismaClient();
 
 // =============================================================================
 // Types
@@ -189,8 +187,57 @@ export async function evaluateRule(
   }
 }
 
+// =============================================================================
+// Whitelisted Compliance Queries
+// Only these pre-defined queries can be executed - no arbitrary SQL allowed
+// =============================================================================
+
+const WHITELISTED_QUERIES: Record<string, { sql: string; description: string }> = {
+  'count_users_without_mfa': {
+    sql: `SELECT COUNT(*) as count FROM "User" WHERE "organizationId" = $1 AND "mfaEnabled" = false`,
+    description: 'Count users without MFA enabled',
+  },
+  'count_stale_api_keys': {
+    sql: `SELECT COUNT(*) as count FROM "ApiKey" WHERE "organizationId" = $1 AND "lastUsedAt" < NOW() - INTERVAL '90 days'`,
+    description: 'Count API keys not used in 90 days',
+  },
+  'count_failed_logins': {
+    sql: `SELECT COUNT(*) as count FROM "AuditLog" WHERE "organizationId" = $1 AND "action" = 'login_failed' AND "createdAt" > NOW() - INTERVAL '24 hours'`,
+    description: 'Count failed login attempts in last 24 hours',
+  },
+  'count_unencrypted_credentials': {
+    sql: `SELECT COUNT(*) as count FROM "ConnectorCredential" cc JOIN "ConnectorInstance" ci ON cc."instanceId" = ci.id WHERE ci."organizationId" = $1 AND cc."keyId" = 'legacy_unencrypted'`,
+    description: 'Count credentials without proper encryption',
+  },
+  'count_expired_certificates': {
+    sql: `SELECT COUNT(*) as count FROM "Certificate" WHERE "organizationId" = $1 AND "expiresAt" < NOW()`,
+    description: 'Count expired certificates',
+  },
+  'count_orphaned_permissions': {
+    sql: `SELECT COUNT(*) as count FROM "Permission" p LEFT JOIN "User" u ON p."userId" = u.id WHERE p."organizationId" = $1 AND u.id IS NULL`,
+    description: 'Count permissions without valid users',
+  },
+  'check_backup_exists': {
+    sql: `SELECT EXISTS(SELECT 1 FROM "Backup" WHERE "organizationId" = $1 AND "createdAt" > NOW() - INTERVAL '24 hours') as result`,
+    description: 'Check if backup exists within 24 hours',
+  },
+  'check_audit_enabled': {
+    sql: `SELECT "auditLoggingEnabled" as result FROM "OrganizationSettings" WHERE "organizationId" = $1`,
+    description: 'Check if audit logging is enabled',
+  },
+  'count_data_retention_violations': {
+    sql: `SELECT COUNT(*) as count FROM "Event" WHERE "organizationId" = $1 AND "createdAt" < NOW() - INTERVAL '7 years'`,
+    description: 'Count events exceeding retention period',
+  },
+  'count_gdpr_consent_missing': {
+    sql: `SELECT COUNT(*) as count FROM "Person" WHERE "organizationId" = $1 AND "gdprConsentGiven" = false AND "isActive" = true`,
+    description: 'Count active persons without GDPR consent',
+  },
+};
+
 /**
- * Evaluate query-based rule
+ * Evaluate query-based rule using WHITELISTED queries only
+ * SECURITY: No arbitrary SQL execution - only pre-defined query IDs are allowed
  */
 async function evaluateQueryRule(
   config: QueryRuleConfig,
@@ -199,20 +246,30 @@ async function evaluateQueryRule(
   const findings: EvaluationFinding[] = [];
 
   try {
-    // Execute the query with parameters
-    const params = {
-      ...config.parameters,
-      organizationId: context.organizationId,
-    };
+    // SECURITY: Only allow whitelisted query IDs - reject arbitrary SQL
+    const queryId = config.queryId || config.query;
+    const whitelistedQuery = WHITELISTED_QUERIES[queryId];
 
-    // Using raw query execution (simplified for demo)
-    const result = await prisma.$queryRawUnsafe<{ count?: number; result?: boolean }[]>(
-      config.query,
-      ...Object.values(params)
-    );
+    if (!whitelistedQuery) {
+      findings.push({
+        type: 'fail',
+        entity: 'Query Validation',
+        description: `Query ID "${queryId}" is not in the whitelist. Only pre-approved compliance queries are allowed.`,
+      });
+
+      return {
+        passed: false,
+        findings,
+        message: `Security: Query "${queryId}" not whitelisted. Contact admin to add approved queries.`,
+      };
+    }
+
+    // Execute the whitelisted query with proper parameter binding
+    // SECURITY: organizationId is bound as a parameter in executeSafeQuery, not interpolated
+    const safeResult = await executeSafeQuery(queryId, context.organizationId);
 
     let passed = false;
-    const resultValue = result[0];
+    const resultValue = safeResult[0];
 
     switch (config.expectedResult) {
       case 'zero':
@@ -233,8 +290,8 @@ async function evaluateQueryRule(
       type: passed ? 'pass' : 'fail',
       entity: 'Query Result',
       description: passed
-        ? `Query returned expected result (${config.expectedResult})`
-        : `Query did not return expected result. Expected: ${config.expectedResult}`,
+        ? `Query "${queryId}" returned expected result (${config.expectedResult})`
+        : `Query "${queryId}" did not return expected result. Expected: ${config.expectedResult}`,
     });
 
     return {
@@ -255,6 +312,105 @@ async function evaluateQueryRule(
       message: `Query execution error: ${(error as Error).message}`,
     };
   }
+}
+
+/**
+ * Execute a whitelisted query with safe parameterization
+ * SECURITY: Uses Prisma's $queryRaw with tagged template literals for SQL injection prevention
+ * The organizationId is properly bound as a parameter, not string-interpolated
+ */
+async function executeSafeQuery(
+  queryId: string,
+  organizationId: string
+): Promise<{ count?: number; result?: boolean }[]> {
+  // SECURITY: Each whitelisted query is executed with proper parameter binding
+  // We use a switch statement to ensure only known queries run with type-safe parameters
+  switch (queryId) {
+    case 'count_users_without_mfa':
+      return prisma.$queryRaw<{ count: bigint }[]>`
+        SELECT COUNT(*) as count FROM "User"
+        WHERE "organizationId" = ${organizationId} AND "mfaEnabled" = false
+      `;
+
+    case 'count_stale_api_keys':
+      return prisma.$queryRaw<{ count: bigint }[]>`
+        SELECT COUNT(*) as count FROM "ApiKey"
+        WHERE "organizationId" = ${organizationId}
+        AND "lastUsedAt" < NOW() - INTERVAL '90 days'
+      `;
+
+    case 'count_failed_logins':
+      return prisma.$queryRaw<{ count: bigint }[]>`
+        SELECT COUNT(*) as count FROM "AuditLog"
+        WHERE "organizationId" = ${organizationId}
+        AND "action" = 'login_failed'
+        AND "createdAt" > NOW() - INTERVAL '24 hours'
+      `;
+
+    case 'count_unencrypted_credentials':
+      return prisma.$queryRaw<{ count: bigint }[]>`
+        SELECT COUNT(*) as count FROM "ConnectorCredential" cc
+        JOIN "ConnectorInstance" ci ON cc."instanceId" = ci.id
+        WHERE ci."organizationId" = ${organizationId}
+        AND cc."keyId" = 'legacy_unencrypted'
+      `;
+
+    case 'count_expired_certificates':
+      return prisma.$queryRaw<{ count: bigint }[]>`
+        SELECT COUNT(*) as count FROM "Certificate"
+        WHERE "organizationId" = ${organizationId} AND "expiresAt" < NOW()
+      `;
+
+    case 'count_orphaned_permissions':
+      return prisma.$queryRaw<{ count: bigint }[]>`
+        SELECT COUNT(*) as count FROM "Permission" p
+        LEFT JOIN "User" u ON p."userId" = u.id
+        WHERE p."organizationId" = ${organizationId} AND u.id IS NULL
+      `;
+
+    case 'check_backup_exists':
+      return prisma.$queryRaw<{ result: boolean }[]>`
+        SELECT EXISTS(
+          SELECT 1 FROM "Backup"
+          WHERE "organizationId" = ${organizationId}
+          AND "createdAt" > NOW() - INTERVAL '24 hours'
+        ) as result
+      `;
+
+    case 'check_audit_enabled':
+      return prisma.$queryRaw<{ result: boolean }[]>`
+        SELECT "auditLoggingEnabled" as result FROM "OrganizationSettings"
+        WHERE "organizationId" = ${organizationId}
+      `;
+
+    case 'count_data_retention_violations':
+      return prisma.$queryRaw<{ count: bigint }[]>`
+        SELECT COUNT(*) as count FROM "Event"
+        WHERE "organizationId" = ${organizationId}
+        AND "createdAt" < NOW() - INTERVAL '7 years'
+      `;
+
+    case 'count_gdpr_consent_missing':
+      return prisma.$queryRaw<{ count: bigint }[]>`
+        SELECT COUNT(*) as count FROM "Person"
+        WHERE "organizationId" = ${organizationId}
+        AND "gdprConsentGiven" = false AND "isActive" = true
+      `;
+
+    default:
+      // This should never happen due to whitelist check, but fail safely
+      throw new Error(`Unknown query ID: ${queryId}`);
+  }
+}
+
+/**
+ * Get list of available whitelisted queries for admin UI
+ */
+export function getWhitelistedQueries(): Array<{ id: string; description: string }> {
+  return Object.entries(WHITELISTED_QUERIES).map(([id, query]) => ({
+    id,
+    description: query.description,
+  }));
 }
 
 /**

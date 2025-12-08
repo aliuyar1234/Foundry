@@ -5,15 +5,13 @@
  * Collects and manages compliance evidence from various sources
  */
 
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../../lib/prisma.js';
 import type {
   ComplianceEvidence,
   EvidenceType,
   EvidenceCollection,
   ComplianceFramework,
 } from 'shared/types/compliance.js';
-
-const prisma = new PrismaClient();
 
 // =============================================================================
 // Types

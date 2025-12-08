@@ -273,3 +273,8 @@ export async function extractAllBmdData(
 
   return { events, stats };
 }
+
+// Re-export specialized extractors
+export * from './bookings.js';
+export * from './payroll.js';
+export * from './taxReporting.js';

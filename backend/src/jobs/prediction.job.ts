@@ -4,12 +4,10 @@
  */
 
 import { Queue, Worker, Job } from 'bullmq';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
 import { getPredictionService } from '../services/prediction/prediction.service.js';
 import { getRedisConnection } from '../lib/redis.js';
-
-const prisma = new PrismaClient();
 
 interface PredictionJobData {
   tenantId: string;

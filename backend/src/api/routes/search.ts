@@ -1,6 +1,10 @@
 /**
  * Search API Routes (T036, T037)
  * Endpoints for semantic search and conversational search
+ *
+ * SECURITY: All routes require authentication (applied globally in routes/index.ts)
+ * SECURITY: RBAC permission checks applied per-endpoint
+ * SECURITY: Input validation via Fastify JSON Schema
  */
 
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
@@ -8,10 +12,75 @@ import { getSearchService } from '../../services/vector/search.service.js';
 import { getConversationService } from '../../services/vector/conversation.service.js';
 import { logger } from '../../lib/logger.js';
 import { SourceType } from '../../models/Embedding.js';
+import { getOrganizationId } from '../middleware/organization.js';
+import { requirePermission } from '../middleware/permissions.js';
 
-/**
- * Request body types
- */
+// =============================================================================
+// Validation Schemas (Fastify JSON Schema)
+// =============================================================================
+
+const searchBodySchema = {
+  type: 'object',
+  required: ['query'],
+  properties: {
+    query: { type: 'string', minLength: 1, maxLength: 10000 },
+    limit: { type: 'integer', minimum: 1, maximum: 100, default: 10 },
+    sourceTypes: {
+      type: 'array',
+      items: { type: 'string', enum: ['document', 'email', 'message', 'meeting'] },
+      maxItems: 4,
+    },
+    category: { type: 'string', maxLength: 100 },
+    dateFrom: { type: 'string', format: 'date-time' },
+    dateTo: { type: 'string', format: 'date-time' },
+    vectorWeight: { type: 'number', minimum: 0, maximum: 1 },
+    keywordWeight: { type: 'number', minimum: 0, maximum: 1 },
+    recencyWeight: { type: 'number', minimum: 0, maximum: 1 },
+  },
+  additionalProperties: false,
+} as const;
+
+const conversationStartSchema = {
+  type: 'object',
+  required: ['query'],
+  properties: {
+    query: { type: 'string', minLength: 1, maxLength: 10000 },
+  },
+  additionalProperties: false,
+} as const;
+
+const conversationContinueSchema = {
+  type: 'object',
+  required: ['conversationId', 'query'],
+  properties: {
+    conversationId: { type: 'string', minLength: 1, maxLength: 100, pattern: '^[a-zA-Z0-9_-]+$' },
+    query: { type: 'string', minLength: 1, maxLength: 10000 },
+  },
+  additionalProperties: false,
+} as const;
+
+const similarBodySchema = {
+  type: 'object',
+  required: ['sourceId'],
+  properties: {
+    sourceId: { type: 'string', minLength: 1, maxLength: 100 },
+    limit: { type: 'integer', minimum: 1, maximum: 50, default: 5 },
+  },
+  additionalProperties: false,
+} as const;
+
+const conversationIdParamSchema = {
+  type: 'object',
+  required: ['conversationId'],
+  properties: {
+    conversationId: { type: 'string', minLength: 1, maxLength: 100, pattern: '^[a-zA-Z0-9_-]+$' },
+  },
+} as const;
+
+// =============================================================================
+// Request body types (for TypeScript)
+// =============================================================================
+
 interface SearchBody {
   query: string;
   limit?: number;
@@ -48,9 +117,14 @@ export async function searchRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * Semantic search (T036)
    * POST /api/v1/search
+   * Requires: discovery.read permission (VIEWER role minimum)
    */
   fastify.post(
     '/',
+    {
+      schema: { body: searchBodySchema },
+      preHandler: [requirePermission('discovery', 'read')],
+    },
     async (
       request: FastifyRequest<{ Body: SearchBody }>,
       reply: FastifyReply
@@ -67,14 +141,9 @@ export async function searchRoutes(fastify: FastifyInstance): Promise<void> {
           keywordWeight,
           recencyWeight,
         } = request.body;
-        const tenantId = (request as any).tenantId || 'default';
+        const tenantId = getOrganizationId(request);
 
-        if (!query || query.trim().length === 0) {
-          return reply.status(400).send({
-            success: false,
-            error: 'Query is required',
-          });
-        }
+        // Schema validation handles required check
 
         const results = await searchService.search(query, tenantId, {
           limit,
@@ -111,24 +180,24 @@ export async function searchRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * Start conversational search (T037)
    * POST /api/v1/search/conversation
+   * Requires: discovery.create permission (ANALYST role minimum)
    */
   fastify.post(
     '/conversation',
+    {
+      schema: { body: conversationStartSchema },
+      preHandler: [requirePermission('discovery', 'create')],
+    },
     async (
       request: FastifyRequest<{ Body: ConversationStartBody }>,
       reply: FastifyReply
     ) => {
       try {
         const { query } = request.body;
-        const tenantId = (request as any).tenantId || 'default';
+        const tenantId = getOrganizationId(request);
         const userId = (request as any).userId || 'anonymous';
 
-        if (!query || query.trim().length === 0) {
-          return reply.status(400).send({
-            success: false,
-            error: 'Query is required',
-          });
-        }
+        // Schema validation handles required check
 
         const response = await conversationService.startConversation(
           tenantId,
@@ -153,9 +222,14 @@ export async function searchRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * Continue conversational search (T037)
    * POST /api/v1/search/conversation/continue
+   * Requires: discovery.read permission (VIEWER role minimum)
    */
   fastify.post(
     '/conversation/continue',
+    {
+      schema: { body: conversationContinueSchema },
+      preHandler: [requirePermission('discovery', 'read')],
+    },
     async (
       request: FastifyRequest<{ Body: ConversationContinueBody }>,
       reply: FastifyReply
@@ -163,12 +237,7 @@ export async function searchRoutes(fastify: FastifyInstance): Promise<void> {
       try {
         const { conversationId, query } = request.body;
 
-        if (!conversationId || !query) {
-          return reply.status(400).send({
-            success: false,
-            error: 'conversationId and query are required',
-          });
-        }
+        // Schema validation handles required check
 
         const response = await conversationService.continueConversation(
           conversationId,
@@ -200,9 +269,14 @@ export async function searchRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * Get conversation history
    * GET /api/v1/search/conversation/:conversationId
+   * Requires: discovery.read permission (VIEWER role minimum)
    */
   fastify.get(
     '/conversation/:conversationId',
+    {
+      schema: { params: conversationIdParamSchema },
+      preHandler: [requirePermission('discovery', 'read')],
+    },
     async (
       request: FastifyRequest<{ Params: { conversationId: string } }>,
       reply: FastifyReply
@@ -241,9 +315,14 @@ export async function searchRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * Delete conversation
    * DELETE /api/v1/search/conversation/:conversationId
+   * Requires: discovery.read permission (VIEWER role minimum - users can delete their own)
    */
   fastify.delete(
     '/conversation/:conversationId',
+    {
+      schema: { params: conversationIdParamSchema },
+      preHandler: [requirePermission('discovery', 'read')],
+    },
     async (
       request: FastifyRequest<{ Params: { conversationId: string } }>,
       reply: FastifyReply
@@ -270,23 +349,23 @@ export async function searchRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * Find similar documents (T036)
    * POST /api/v1/search/similar
+   * Requires: discovery.read permission (VIEWER role minimum)
    */
   fastify.post(
     '/similar',
+    {
+      schema: { body: similarBodySchema },
+      preHandler: [requirePermission('discovery', 'read')],
+    },
     async (
       request: FastifyRequest<{ Body: SimilarBody }>,
       reply: FastifyReply
     ) => {
       try {
         const { sourceId, limit = 5 } = request.body;
-        const tenantId = (request as any).tenantId || 'default';
+        const tenantId = getOrganizationId(request);
 
-        if (!sourceId) {
-          return reply.status(400).send({
-            success: false,
-            error: 'sourceId is required',
-          });
-        }
+        // Schema validation handles required check
 
         const results = await searchService.findSimilar(
           sourceId,
@@ -315,9 +394,14 @@ export async function searchRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * Vector-only search (for advanced users)
    * POST /api/v1/search/vector
+   * Requires: discovery.read permission (VIEWER role minimum)
    */
   fastify.post(
     '/vector',
+    {
+      schema: { body: searchBodySchema },
+      preHandler: [requirePermission('discovery', 'read')],
+    },
     async (
       request: FastifyRequest<{ Body: SearchBody }>,
       reply: FastifyReply
@@ -325,14 +409,9 @@ export async function searchRoutes(fastify: FastifyInstance): Promise<void> {
       try {
         const { query, limit = 10, sourceTypes, category, dateFrom, dateTo } =
           request.body;
-        const tenantId = (request as any).tenantId || 'default';
+        const tenantId = getOrganizationId(request);
 
-        if (!query) {
-          return reply.status(400).send({
-            success: false,
-            error: 'Query is required',
-          });
-        }
+        // Schema validation handles required check
 
         const results = await searchService.vectorSearch(query, tenantId, {
           limit,

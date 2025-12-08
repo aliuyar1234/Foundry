@@ -5,7 +5,7 @@
  * Analyzes how upcoming deadlines affect team capacity
  */
 
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../../lib/prisma.js';
 
 // =============================================================================
 // Types
@@ -88,8 +88,6 @@ export interface DeadlineConflict {
 // =============================================================================
 // Deadline Impact Estimator
 // =============================================================================
-
-const prisma = new PrismaClient();
 
 /**
  * Estimate impact of a single deadline

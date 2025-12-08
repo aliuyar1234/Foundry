@@ -1,11 +1,15 @@
 /**
  * Google Workspace OAuth Flow Handler
+ * Task: T016 (Enhanced)
  * Manages authentication with Google APIs
  */
+
+import { OAuthTokens } from '../base/oauthTokenManager';
 
 export interface GoogleAuthConfig {
   clientId: string;
   clientSecret: string;
+  redirectUri?: string;
 }
 
 export interface GoogleTokens {
@@ -13,6 +17,18 @@ export interface GoogleTokens {
   refreshToken?: string;
   expiresAt: Date;
   scopes: string[];
+}
+
+export interface GoogleAuthResult {
+  success: boolean;
+  tokens?: OAuthTokens;
+  error?: string;
+  userInfo?: {
+    email: string;
+    name?: string;
+    picture?: string;
+    domain?: string;
+  };
 }
 
 // User-delegated scopes for OAuth flow
@@ -186,6 +202,7 @@ export async function getUserInfo(accessToken: string): Promise<{
   email: string;
   name: string;
   picture?: string;
+  domain?: string;
 }> {
   const response = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
     headers: {
@@ -204,5 +221,157 @@ export async function getUserInfo(accessToken: string): Promise<{
     email: data.email,
     name: data.name,
     picture: data.picture,
+    domain: data.hd, // Hosted domain for Google Workspace
   };
+}
+
+/**
+ * GoogleAuthHandler class for more comprehensive auth management
+ * Task: T016
+ */
+export class GoogleAuthHandler {
+  private config: GoogleAuthConfig;
+
+  constructor(config: GoogleAuthConfig) {
+    this.config = config;
+  }
+
+  /**
+   * Generate OAuth authorization URL with additional options
+   */
+  getAuthorizationUrl(
+    redirectUri: string,
+    state: string,
+    options?: {
+      loginHint?: string;
+      hostedDomain?: string;
+      prompt?: 'none' | 'consent' | 'select_account';
+      scopes?: string[];
+    }
+  ): string {
+    const scopes = options?.scopes || GOOGLE_SCOPES;
+    const params = new URLSearchParams({
+      client_id: this.config.clientId,
+      response_type: 'code',
+      redirect_uri: redirectUri,
+      scope: scopes.join(' '),
+      state: state,
+      access_type: 'offline',
+      prompt: options?.prompt || 'consent',
+      include_granted_scopes: 'true',
+    });
+
+    if (options?.loginHint) {
+      params.set('login_hint', options.loginHint);
+    }
+
+    if (options?.hostedDomain) {
+      params.set('hd', options.hostedDomain);
+    }
+
+    return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+  }
+
+  /**
+   * Exchange code and return with user info
+   */
+  async exchangeCodeForTokens(
+    code: string,
+    redirectUri: string
+  ): Promise<GoogleAuthResult> {
+    try {
+      const tokens = await exchangeCodeForTokens(this.config, code, redirectUri);
+      const userInfo = await getUserInfo(tokens.accessToken);
+
+      return {
+        success: true,
+        tokens: {
+          accessToken: tokens.accessToken,
+          refreshToken: tokens.refreshToken,
+          expiresAt: tokens.expiresAt,
+          tokenType: 'Bearer',
+          scope: tokens.scopes.join(' '),
+          metadata: {
+            userEmail: userInfo.email,
+            domain: userInfo.domain,
+          },
+        },
+        userInfo: {
+          email: userInfo.email,
+          name: userInfo.name,
+          picture: userInfo.picture,
+          domain: userInfo.domain,
+        },
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Token exchange failed',
+      };
+    }
+  }
+
+  /**
+   * Refresh access token
+   */
+  async refreshAccessToken(refreshToken: string): Promise<GoogleAuthResult> {
+    try {
+      const tokens = await refreshAccessToken(this.config, refreshToken);
+
+      return {
+        success: true,
+        tokens: {
+          accessToken: tokens.accessToken,
+          refreshToken: tokens.refreshToken || refreshToken,
+          expiresAt: tokens.expiresAt,
+          tokenType: 'Bearer',
+          scope: tokens.scopes.join(' '),
+        },
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Token refresh failed',
+      };
+    }
+  }
+
+  /**
+   * Validate access token
+   */
+  async validateToken(accessToken: string): Promise<{
+    valid: boolean;
+    expiresIn?: number;
+    email?: string;
+    error?: string;
+  }> {
+    try {
+      const response = await fetch(
+        `https://www.googleapis.com/oauth2/v1/tokeninfo?access_token=${accessToken}`
+      );
+
+      if (!response.ok) {
+        return { valid: false, error: 'Invalid token' };
+      }
+
+      const data = await response.json();
+      return {
+        valid: true,
+        expiresIn: data.expires_in,
+        email: data.email,
+      };
+    } catch (error) {
+      return {
+        valid: false,
+        error: error instanceof Error ? error.message : 'Validation failed',
+      };
+    }
+  }
+}
+
+/**
+ * Create Google Auth handler
+ */
+export function createGoogleAuthHandler(config: GoogleAuthConfig): GoogleAuthHandler {
+  return new GoogleAuthHandler(config);
 }

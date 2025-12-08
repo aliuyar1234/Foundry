@@ -5,15 +5,13 @@
  * Detects operational patterns that may require self-healing actions
  */
 
-import { PrismaClient } from '@prisma/client';
 import { logger } from '../../lib/logger.js';
 import type {
   PatternType,
   DetectedPattern,
   AffectedEntity,
 } from 'shared/types/selfHealing.js';
-
-const prisma = new PrismaClient();
+import { prisma } from '../../lib/prisma.js';
 
 // =============================================================================
 // Types

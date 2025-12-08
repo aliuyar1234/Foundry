@@ -5,7 +5,7 @@
  */
 
 import { Job, Queue, Worker } from 'bullmq';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../../lib/prisma.js';
 import {
   enrichCompany,
   enrichCompanies,
@@ -18,8 +18,6 @@ import {
   createAddressValidator,
   ValidationResult,
 } from '../../services/enrichment/addressValidator.js';
-
-const prisma = new PrismaClient();
 
 export interface EnrichmentJobData {
   organizationId: string;

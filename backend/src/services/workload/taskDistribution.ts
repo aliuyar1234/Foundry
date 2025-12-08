@@ -5,7 +5,7 @@
  * Identifies workload imbalances and optimization opportunities
  */
 
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../../lib/prisma.js';
 
 // =============================================================================
 // Types
@@ -87,8 +87,6 @@ export interface TaskAssignmentSuggestion {
 // =============================================================================
 // Task Distribution Analyzer
 // =============================================================================
-
-const prisma = new PrismaClient();
 
 /**
  * Analyze task distribution for a team

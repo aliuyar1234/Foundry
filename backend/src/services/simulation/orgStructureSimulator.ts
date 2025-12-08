@@ -3,10 +3,8 @@
  * Simulates the impact of organizational structure changes
  */
 
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../../lib/prisma.js';
 import { neo4jConnection } from '../../graph/connection';
-
-const prisma = new PrismaClient();
 
 export interface OrgStructureChange {
   type: 'team_merge' | 'team_split' | 'reporting_change' | 'department_restructure' | 'role_consolidation';

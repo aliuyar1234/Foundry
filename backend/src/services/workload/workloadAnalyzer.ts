@@ -5,7 +5,7 @@
  * Calculates and analyzes workload metrics for individuals and teams
  */
 
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../../lib/prisma.js';
 import { logger } from '../../lib/logger.js';
 import type {
   WorkloadMetrics,
@@ -14,8 +14,6 @@ import type {
   TeamWorkload,
   TeamMemberWorkload,
 } from 'shared/types/workload.js';
-
-const prisma = new PrismaClient();
 
 // =============================================================================
 // Types

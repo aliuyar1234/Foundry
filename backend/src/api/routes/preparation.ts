@@ -6,7 +6,7 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { Pool } from 'pg';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../../lib/prisma.js';
 import {
   EntityRecordService,
   createEntityRecordService,
@@ -113,14 +113,12 @@ const exportDataSchema = z.object({
 
 export default async function preparationRoutes(fastify: FastifyInstance): Promise<void> {
   const pool = new Pool({ connectionString: process.env.TIMESCALE_URL });
-  const prisma = new PrismaClient();
   const entityRecordService = createEntityRecordService(pool, prisma);
   const goldenRecordMerger = createGoldenRecordMerger(pool, prisma);
 
   // Cleanup on close
   fastify.addHook('onClose', async () => {
     await pool.end();
-    await prisma.$disconnect();
   });
 
   /**

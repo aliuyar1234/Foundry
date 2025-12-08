@@ -5,7 +5,7 @@
  * Provides granular scoring for burnout risk factors
  */
 
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../../lib/prisma.js';
 
 // =============================================================================
 // Types
@@ -80,8 +80,6 @@ export interface TeamBurnoutSummary {
 // =============================================================================
 // Burnout Scorer
 // =============================================================================
-
-const prisma = new PrismaClient();
 
 // Factor weights (must sum to 1)
 const FACTOR_WEIGHTS = {

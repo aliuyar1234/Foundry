@@ -297,3 +297,8 @@ export class SalesforceConnector extends BaseConnector {
 // Export types and utilities
 export * from './salesforceClient.js';
 export * from './extractors/index.js';
+export * from './customObjectDiscovery.js';
+export * from './fieldHistoryTracker.js';
+export * from './bulkApi.js';
+export * from './incrementalSync.js';
+export * from './eventNormalizer.js';

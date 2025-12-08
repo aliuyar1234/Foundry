@@ -5,7 +5,7 @@
  * Uses optimization algorithms to find optimal task distribution
  */
 
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../../lib/prisma.js';
 
 // =============================================================================
 // Types
@@ -77,8 +77,6 @@ export interface OptimizationConfig {
 // =============================================================================
 // Balancing Optimizer
 // =============================================================================
-
-const prisma = new PrismaClient();
 
 /**
  * Optimize workload distribution for a team

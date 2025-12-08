@@ -245,3 +245,7 @@ export class BmdConnector extends BaseConnector {
 // Export types and utilities
 export * from './bmdClient.js';
 export * from './extractors/index.js';
+
+// Export additional modules
+export * from './eventNormalizer.js';
+export * from './parsers/ntcsParser.js';

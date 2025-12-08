@@ -37,6 +37,13 @@ const PERMISSIONS: Permission[] = [
   { resource: 'dataSource', action: 'update', minRole: 'ADMIN' },
   { resource: 'dataSource', action: 'delete', minRole: 'ADMIN' },
 
+  // Connector permissions (T183-T192)
+  { resource: 'connector', action: 'read', minRole: 'VIEWER' },
+  { resource: 'connector', action: 'create', minRole: 'ADMIN' },
+  { resource: 'connector', action: 'update', minRole: 'ADMIN' },
+  { resource: 'connector', action: 'delete', minRole: 'ADMIN' },
+  { resource: 'connector', action: 'manage', minRole: 'ADMIN' },
+
   // Discovery permissions
   { resource: 'discovery', action: 'read', minRole: 'VIEWER' },
   { resource: 'discovery', action: 'create', minRole: 'ANALYST' },

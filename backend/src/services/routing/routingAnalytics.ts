@@ -3,11 +3,9 @@
  * T047 - Create routing analytics
  */
 
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../../lib/prisma.js';
 import { logger } from '../../lib/logger.js';
 import { getRoutingAccuracy, getRoutingVolume } from '../operate/timescaleClient.js';
-
-const prisma = new PrismaClient();
 
 // =============================================================================
 // Types

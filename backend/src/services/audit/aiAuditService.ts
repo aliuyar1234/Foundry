@@ -6,7 +6,7 @@
  * for compliance, debugging, and analytics purposes
  */
 
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../../lib/prisma.js';
 import crypto from 'crypto';
 
 // Types

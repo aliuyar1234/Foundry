@@ -1,11 +1,134 @@
 /**
  * Graph API Routes (T112-T115)
  * Endpoints for knowledge graph enrichment
+ *
+ * SECURITY: All routes require authentication (applied globally in routes/index.ts)
+ * SECURITY: RBAC permission checks applied per-endpoint
+ * SECURITY: Input validation via Fastify JSON Schema
  */
 
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { getEnrichmentService } from '../../services/graph/enrichment.service.js';
 import { logger } from '../../lib/logger.js';
+import { getOrganizationId } from '../middleware/organization.js';
+import { requirePermission } from '../middleware/permissions.js';
+
+// =============================================================================
+// Validation Schemas (Fastify JSON Schema)
+// =============================================================================
+
+const discoverRelationshipsSchema = {
+  type: 'object',
+  properties: {
+    entityTypes: {
+      type: 'array',
+      items: { type: 'string', minLength: 1, maxLength: 100 },
+      maxItems: 20,
+    },
+    minConfidence: { type: 'number', minimum: 0, maximum: 1 },
+    limit: { type: 'integer', minimum: 1, maximum: 1000, default: 100 },
+  },
+  additionalProperties: false,
+} as const;
+
+const enrichEntitySchema = {
+  type: 'object',
+  required: ['entityType', 'entityId'],
+  properties: {
+    entityType: { type: 'string', minLength: 1, maxLength: 100, pattern: '^[a-zA-Z0-9_-]+$' },
+    entityId: { type: 'string', minLength: 1, maxLength: 100 },
+    apply: { type: 'boolean', default: false },
+  },
+  additionalProperties: false,
+} as const;
+
+const applyEnrichmentSchema = {
+  type: 'object',
+  required: ['enrichment'],
+  properties: {
+    enrichment: {
+      type: 'object',
+      required: ['type', 'id', 'name'],
+      properties: {
+        type: { type: 'string', minLength: 1, maxLength: 100 },
+        id: { type: 'string', minLength: 1, maxLength: 100 },
+        name: { type: 'string', minLength: 1, maxLength: 500 },
+        discoveredProperties: { type: 'object', additionalProperties: true },
+        discoveredRelationships: {
+          type: 'array',
+          maxItems: 100,
+          items: {
+            type: 'object',
+            required: ['sourceType', 'sourceId', 'targetType', 'targetId', 'relationshipType'],
+            properties: {
+              sourceType: { type: 'string', minLength: 1, maxLength: 100 },
+              sourceId: { type: 'string', minLength: 1, maxLength: 100 },
+              sourceName: { type: 'string', maxLength: 500 },
+              targetType: { type: 'string', minLength: 1, maxLength: 100 },
+              targetId: { type: 'string', minLength: 1, maxLength: 100 },
+              targetName: { type: 'string', maxLength: 500 },
+              relationshipType: { type: 'string', minLength: 1, maxLength: 100 },
+              confidence: { type: 'number', minimum: 0, maximum: 1 },
+              evidence: { type: 'array', items: { type: 'string', maxLength: 1000 }, maxItems: 50 },
+            },
+            additionalProperties: false,
+          },
+        },
+      },
+      additionalProperties: false,
+    },
+  },
+  additionalProperties: false,
+} as const;
+
+const applyExpertiseSchema = {
+  type: 'object',
+  required: ['mappings'],
+  properties: {
+    mappings: {
+      type: 'array',
+      minItems: 1,
+      maxItems: 100,
+      items: {
+        type: 'object',
+        required: ['personId', 'personName', 'expertise'],
+        properties: {
+          personId: { type: 'string', minLength: 1, maxLength: 100 },
+          personName: { type: 'string', minLength: 1, maxLength: 500 },
+          expertise: {
+            type: 'array',
+            maxItems: 50,
+            items: {
+              type: 'object',
+              required: ['domain', 'level', 'confidence'],
+              properties: {
+                domain: { type: 'string', minLength: 1, maxLength: 200 },
+                level: { type: 'string', enum: ['beginner', 'intermediate', 'advanced', 'expert'] },
+                confidence: { type: 'number', minimum: 0, maximum: 1 },
+                evidence: { type: 'array', items: { type: 'string', maxLength: 1000 }, maxItems: 20 },
+              },
+              additionalProperties: false,
+            },
+          },
+          inferredFrom: { type: 'array', items: { type: 'string', maxLength: 200 }, maxItems: 50 },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  additionalProperties: false,
+} as const;
+
+const clustersQuerySchema = {
+  type: 'object',
+  properties: {
+    minSize: { type: 'string', pattern: '^[0-9]+$' },
+  },
+} as const;
+
+// =============================================================================
+// Request body types (for TypeScript)
+// =============================================================================
 
 /**
  * Request body types
@@ -51,15 +174,20 @@ export async function graphRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * Discover potential relationships
    * POST /api/v1/graph/discover
+   * Requires: discovery.create permission (ANALYST role minimum)
    */
   fastify.post(
     '/discover',
+    {
+      schema: { body: discoverRelationshipsSchema },
+      preHandler: [requirePermission('discovery', 'create')],
+    },
     async (
       request: FastifyRequest<{ Body: DiscoverRelationshipsBody }>,
       reply: FastifyReply
     ) => {
       try {
-        const tenantId = (request as any).tenantId || 'default';
+        const tenantId = getOrganizationId(request);
         const { entityTypes, minConfidence, limit } = request.body;
 
         const relationships = await enrichmentService.discoverRelationships(tenantId, {
@@ -85,15 +213,20 @@ export async function graphRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * Enrich a specific entity
    * POST /api/v1/graph/enrich
+   * Requires: entityRecord.update permission (ANALYST role minimum)
    */
   fastify.post(
     '/enrich',
+    {
+      schema: { body: enrichEntitySchema },
+      preHandler: [requirePermission('entityRecord', 'update')],
+    },
     async (
       request: FastifyRequest<{ Body: EnrichEntityBody }>,
       reply: FastifyReply
     ) => {
       try {
-        const tenantId = (request as any).tenantId || 'default';
+        const tenantId = getOrganizationId(request);
         const { entityType, entityId, apply = false } = request.body;
 
         const enrichment = await enrichmentService.enrichEntity(
@@ -133,9 +266,14 @@ export async function graphRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * Apply enrichment to graph
    * POST /api/v1/graph/apply
+   * Requires: entityRecord.update permission (ANALYST role minimum)
    */
   fastify.post(
     '/apply',
+    {
+      schema: { body: applyEnrichmentSchema },
+      preHandler: [requirePermission('entityRecord', 'update')],
+    },
     async (
       request: FastifyRequest<{ Body: ApplyEnrichmentBody }>,
       reply: FastifyReply
@@ -166,12 +304,14 @@ export async function graphRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * Map expertise for all people
    * POST /api/v1/graph/expertise/map
+   * Requires: discovery.create permission (ANALYST role minimum)
    */
   fastify.post(
     '/expertise/map',
+    { preHandler: [requirePermission('discovery', 'create')] },
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
-        const tenantId = (request as any).tenantId || 'default';
+        const tenantId = getOrganizationId(request);
 
         const mappings = await enrichmentService.mapExpertise(tenantId);
 
@@ -192,9 +332,14 @@ export async function graphRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * Apply expertise mappings
    * POST /api/v1/graph/expertise/apply
+   * Requires: entityRecord.update permission (ANALYST role minimum)
    */
   fastify.post(
     '/expertise/apply',
+    {
+      schema: { body: applyExpertiseSchema },
+      preHandler: [requirePermission('entityRecord', 'update')],
+    },
     async (
       request: FastifyRequest<{
         Body: {
@@ -235,15 +380,20 @@ export async function graphRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * Find clusters in the graph
    * GET /api/v1/graph/clusters
+   * Requires: discovery.read permission (VIEWER role minimum)
    */
   fastify.get(
     '/clusters',
+    {
+      schema: { querystring: clustersQuerySchema },
+      preHandler: [requirePermission('discovery', 'read')],
+    },
     async (
       request: FastifyRequest<{ Querystring: { minSize?: string } }>,
       reply: FastifyReply
     ) => {
       try {
-        const tenantId = (request as any).tenantId || 'default';
+        const tenantId = getOrganizationId(request);
         const { minSize } = request.query;
 
         const clusters = await enrichmentService.findClusters(tenantId, {
@@ -267,12 +417,14 @@ export async function graphRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * Get graph statistics
    * GET /api/v1/graph/stats
+   * Requires: discovery.read permission (VIEWER role minimum)
    */
   fastify.get(
     '/stats',
+    { preHandler: [requirePermission('discovery', 'read')] },
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
-        const tenantId = (request as any).tenantId || 'default';
+        const tenantId = getOrganizationId(request);
 
         const stats = await enrichmentService.getGraphStats(tenantId);
 

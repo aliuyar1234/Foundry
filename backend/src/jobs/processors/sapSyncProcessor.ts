@@ -18,6 +18,8 @@ export interface SapSyncJobData {
   fullSync?: boolean;
   lookbackMonths?: number;
   entities?: string[];
+  batchId?: string;
+  includeGermanLocalization?: boolean;
 }
 
 export interface SapSyncJobResult {
@@ -28,6 +30,9 @@ export interface SapSyncJobResult {
   itemsProcessed: number;
   ordersProcessed: number;
   invoicesProcessed: number;
+  approvalsProcessed: number;
+  attachmentsProcessed: number;
+  entityStats?: Record<string, number>;
 }
 
 export class SapSyncProcessor extends BaseProcessor<SapSyncJobData, SapSyncJobResult> {
@@ -136,14 +141,21 @@ export class SapSyncProcessor extends BaseProcessor<SapSyncJobData, SapSyncJobRe
         duration: Date.now() - startTime,
       });
 
+      // Extract stats from sync metadata
+      const metadata = syncResult.metadata as Record<string, any> || {};
+      const entityStats = metadata.stats as Record<string, number> || {};
+
       return {
         eventsCount: syncResult.eventsCount,
         duration: Date.now() - startTime,
-        customersProcessed: 0,
-        vendorsProcessed: 0,
-        itemsProcessed: 0,
-        ordersProcessed: 0,
-        invoicesProcessed: 0,
+        customersProcessed: entityStats.customers || entityStats.BusinessPartners || 0,
+        vendorsProcessed: entityStats.vendors || 0,
+        itemsProcessed: entityStats.Items || entityStats.items || 0,
+        ordersProcessed: (entityStats.Orders || 0) + (entityStats.PurchaseOrders || 0),
+        invoicesProcessed: (entityStats.Invoices || 0) + (entityStats.PurchaseInvoices || 0),
+        approvalsProcessed: entityStats.ApprovalRequests || 0,
+        attachmentsProcessed: entityStats.Attachments2 || 0,
+        entityStats,
       };
     } catch (error) {
       context.logger.error('SAP B1 sync failed', error as Error, { dataSourceId });

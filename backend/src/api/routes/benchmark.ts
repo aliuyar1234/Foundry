@@ -9,10 +9,9 @@ import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { BenchmarkService } from '../../services/benchmark/benchmarkService';
 import { requireAuth, requireEntityAccess } from '../middleware/auth';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../../lib/prisma.js';
 
 const router = Router();
-const prisma = new PrismaClient();
 const benchmarkService = new BenchmarkService(prisma);
 
 // -----------------------------------------------------------------------------

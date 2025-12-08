@@ -175,7 +175,7 @@ export async function entityRoutes(fastify: FastifyInstance): Promise<void> {
       } catch (error: any) {
         if (error.code === 'ENTITY_NOT_FOUND') {
           reply.code(404);
-          return { error: error.message };
+          return { error: 'Entity not found' };
         }
         throw error;
       }
@@ -206,11 +206,11 @@ export async function entityRoutes(fastify: FastifyInstance): Promise<void> {
       } catch (error: any) {
         if (error.code === 'ENTITY_NOT_FOUND') {
           reply.code(404);
-          return { error: error.message };
+          return { error: 'Entity not found' };
         }
         if (error.code === 'ENTITY_HAS_CHILDREN') {
           reply.code(400);
-          return { error: error.message };
+          return { error: 'Cannot archive entity with child entities' };
         }
         throw error;
       }
@@ -335,7 +335,7 @@ export async function entityRoutes(fastify: FastifyInstance): Promise<void> {
       } catch (error: any) {
         if (error.code === 'PARENT_NOT_ACTIVE') {
           reply.code(400);
-          return { error: error.message };
+          return { error: 'Cannot reactivate entity: parent entity is not active' };
         }
         throw error;
       }

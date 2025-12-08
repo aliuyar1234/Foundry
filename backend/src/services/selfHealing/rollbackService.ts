@@ -5,12 +5,10 @@
  * Manages rollback operations for self-healing actions
  */
 
-import { PrismaClient } from '@prisma/client';
 import { logger } from '../../lib/logger.js';
 import { canRollback, rollbackExecution, getExecutionHistory } from './actionExecutor.js';
 import type { ActionExecution, ExecutionStatus } from 'shared/types/selfHealing.js';
-
-const prisma = new PrismaClient();
+import { prisma } from '../../lib/prisma.js';
 
 // =============================================================================
 // Types

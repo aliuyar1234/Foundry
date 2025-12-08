@@ -1,12 +1,84 @@
 /**
  * Prediction API Routes (T123-T126)
  * Endpoints for predictive analytics
+ *
+ * SECURITY: All routes require authentication (applied globally in routes/index.ts)
+ * SECURITY: RBAC permission checks applied per-endpoint
+ * SECURITY: Input validation via Fastify JSON Schema
  */
 
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { getPredictionService } from '../../services/prediction/prediction.service.js';
 import { logger } from '../../lib/logger.js';
 import type { PredictionModelType, ModelConfig } from '../../models/Prediction.js';
+import { getOrganizationId } from '../middleware/organization.js';
+import { requirePermission } from '../middleware/permissions.js';
+
+// =============================================================================
+// Validation Schemas (Fastify JSON Schema)
+// =============================================================================
+
+const modelTypeEnum = ['BOTTLENECK', 'DELAY', 'OUTCOME', 'RESOURCE', 'HEALTH', 'ANOMALY'];
+
+const createModelSchema = {
+  type: 'object',
+  required: ['name', 'description', 'type', 'config'],
+  properties: {
+    name: { type: 'string', minLength: 1, maxLength: 200 },
+    description: { type: 'string', minLength: 1, maxLength: 2000 },
+    type: { type: 'string', enum: modelTypeEnum },
+    config: { type: 'object', additionalProperties: true },
+  },
+  additionalProperties: false,
+} as const;
+
+const predictSchema = {
+  type: 'object',
+  required: ['modelId', 'processId'],
+  properties: {
+    modelId: { type: 'string', minLength: 1, maxLength: 100 },
+    processId: { type: 'string', minLength: 1, maxLength: 100 },
+    instanceId: { type: 'string', maxLength: 100 },
+    context: { type: 'object', additionalProperties: true },
+  },
+  additionalProperties: false,
+} as const;
+
+const idParamSchema = {
+  type: 'object',
+  required: ['id'],
+  properties: {
+    id: { type: 'string', minLength: 1, maxLength: 100 },
+  },
+} as const;
+
+const processIdParamSchema = {
+  type: 'object',
+  required: ['processId'],
+  properties: {
+    processId: { type: 'string', minLength: 1, maxLength: 100 },
+  },
+} as const;
+
+const limitQuerySchema = {
+  type: 'object',
+  properties: {
+    limit: { type: 'string', pattern: '^[0-9]+$' },
+  },
+} as const;
+
+const forecastQuerySchema = {
+  type: 'object',
+  required: ['metric'],
+  properties: {
+    metric: { type: 'string', minLength: 1, maxLength: 100 },
+    horizonDays: { type: 'string', pattern: '^[0-9]+$' },
+  },
+} as const;
+
+// =============================================================================
+// Request body types (for TypeScript)
+// =============================================================================
 
 /**
  * Request body types
@@ -39,12 +111,17 @@ export async function predictionRoutes(fastify: FastifyInstance): Promise<void> 
   /**
    * Create a prediction model
    * POST /api/v1/predictions/models
+   * Requires: process.create permission (ANALYST role minimum)
    */
   fastify.post(
     '/models',
+    {
+      schema: { body: createModelSchema },
+      preHandler: [requirePermission('process', 'create')],
+    },
     async (request: FastifyRequest<{ Body: CreateModelBody }>, reply: FastifyReply) => {
       try {
-        const tenantId = (request as any).tenantId || 'default';
+        const tenantId = getOrganizationId(request);
         const { name, description, type, config } = request.body;
 
         const model = await predictionService.createModel({
@@ -72,12 +149,14 @@ export async function predictionRoutes(fastify: FastifyInstance): Promise<void> 
   /**
    * List prediction models
    * GET /api/v1/predictions/models
+   * Requires: process.read permission (VIEWER role minimum)
    */
   fastify.get(
     '/models',
+    { preHandler: [requirePermission('process', 'read')] },
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
-        const tenantId = (request as any).tenantId || 'default';
+        const tenantId = getOrganizationId(request);
         const models = await predictionService.listModels(tenantId);
 
         return reply.send({
@@ -97,9 +176,14 @@ export async function predictionRoutes(fastify: FastifyInstance): Promise<void> 
   /**
    * Get prediction model by ID
    * GET /api/v1/predictions/models/:id
+   * Requires: process.read permission (VIEWER role minimum)
    */
   fastify.get(
     '/models/:id',
+    {
+      schema: { params: idParamSchema },
+      preHandler: [requirePermission('process', 'read')],
+    },
     async (
       request: FastifyRequest<{ Params: { id: string } }>,
       reply: FastifyReply
@@ -132,9 +216,14 @@ export async function predictionRoutes(fastify: FastifyInstance): Promise<void> 
   /**
    * Train a prediction model
    * POST /api/v1/predictions/models/:id/train
+   * Requires: process.update permission (ANALYST role minimum)
    */
   fastify.post(
     '/models/:id/train',
+    {
+      schema: { params: idParamSchema },
+      preHandler: [requirePermission('process', 'update')],
+    },
     async (
       request: FastifyRequest<{ Params: { id: string } }>,
       reply: FastifyReply
@@ -167,12 +256,17 @@ export async function predictionRoutes(fastify: FastifyInstance): Promise<void> 
   /**
    * Generate prediction
    * POST /api/v1/predictions/predict
+   * Requires: process.read permission (VIEWER role minimum)
    */
   fastify.post(
     '/predict',
+    {
+      schema: { body: predictSchema },
+      preHandler: [requirePermission('process', 'read')],
+    },
     async (request: FastifyRequest<{ Body: PredictBody }>, reply: FastifyReply) => {
       try {
-        const tenantId = (request as any).tenantId || 'default';
+        const tenantId = getOrganizationId(request);
         const { modelId, processId, instanceId, context } = request.body;
 
         const prediction = await predictionService.predict({
@@ -200,9 +294,14 @@ export async function predictionRoutes(fastify: FastifyInstance): Promise<void> 
   /**
    * Get predictions for a process
    * GET /api/v1/predictions/process/:processId
+   * Requires: process.read permission (VIEWER role minimum)
    */
   fastify.get(
     '/process/:processId',
+    {
+      schema: { params: processIdParamSchema, querystring: limitQuerySchema },
+      preHandler: [requirePermission('process', 'read')],
+    },
     async (
       request: FastifyRequest<{
         Params: { processId: string };
@@ -235,15 +334,20 @@ export async function predictionRoutes(fastify: FastifyInstance): Promise<void> 
   /**
    * Get process health score
    * GET /api/v1/predictions/health/:processId
+   * Requires: process.read permission (VIEWER role minimum)
    */
   fastify.get(
     '/health/:processId',
+    {
+      schema: { params: processIdParamSchema },
+      preHandler: [requirePermission('process', 'read')],
+    },
     async (
       request: FastifyRequest<{ Params: { processId: string } }>,
       reply: FastifyReply
     ) => {
       try {
-        const tenantId = (request as any).tenantId || 'default';
+        const tenantId = getOrganizationId(request);
         const { processId } = request.params;
 
         const health = await predictionService.calculateHealthScore(processId, tenantId);
@@ -265,15 +369,20 @@ export async function predictionRoutes(fastify: FastifyInstance): Promise<void> 
   /**
    * Detect anomalies for a process
    * GET /api/v1/predictions/anomalies/:processId
+   * Requires: process.read permission (VIEWER role minimum)
    */
   fastify.get(
     '/anomalies/:processId',
+    {
+      schema: { params: processIdParamSchema },
+      preHandler: [requirePermission('process', 'read')],
+    },
     async (
       request: FastifyRequest<{ Params: { processId: string } }>,
       reply: FastifyReply
     ) => {
       try {
-        const tenantId = (request as any).tenantId || 'default';
+        const tenantId = getOrganizationId(request);
         const { processId } = request.params;
 
         const anomalies = await predictionService.detectAnomalies(processId, tenantId);
@@ -295,9 +404,14 @@ export async function predictionRoutes(fastify: FastifyInstance): Promise<void> 
   /**
    * Generate forecast for a process metric
    * GET /api/v1/predictions/forecast/:processId
+   * Requires: process.read permission (VIEWER role minimum)
    */
   fastify.get(
     '/forecast/:processId',
+    {
+      schema: { params: processIdParamSchema, querystring: forecastQuerySchema },
+      preHandler: [requirePermission('process', 'read')],
+    },
     async (
       request: FastifyRequest<{
         Params: { processId: string };
@@ -306,7 +420,7 @@ export async function predictionRoutes(fastify: FastifyInstance): Promise<void> 
       reply: FastifyReply
     ) => {
       try {
-        const tenantId = (request as any).tenantId || 'default';
+        const tenantId = getOrganizationId(request);
         const { processId } = request.params;
         const { metric, horizonDays } = request.query;
 

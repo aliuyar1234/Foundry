@@ -18,6 +18,8 @@ export interface OdooSyncJobData {
   fullSync?: boolean;
   lookbackMonths?: number;
   modules?: string[];
+  models?: string[];
+  batchId?: string;
 }
 
 export interface OdooSyncJobResult {
@@ -136,14 +138,17 @@ export class OdooSyncProcessor extends BaseProcessor<OdooSyncJobData, OdooSyncJo
         duration: Date.now() - startTime,
       });
 
+      // Extract stats from sync metadata if available
+      const stats = (syncResult as any).stats || {};
+
       return {
         eventsCount: syncResult.eventsCount,
         duration: Date.now() - startTime,
-        customersProcessed: 0,
-        vendorsProcessed: 0,
-        productsProcessed: 0,
-        ordersProcessed: 0,
-        invoicesProcessed: 0,
+        customersProcessed: stats.customers || 0,
+        vendorsProcessed: stats.vendors || 0,
+        productsProcessed: stats.products || 0,
+        ordersProcessed: (stats.saleOrders || 0) + (stats.purchaseOrders || 0),
+        invoicesProcessed: stats.invoices || 0,
       };
     } catch (error) {
       context.logger.error('Odoo sync failed', error as Error, { dataSourceId });

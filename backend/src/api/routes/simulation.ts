@@ -17,13 +17,12 @@ import {
 } from '../../services/simulation';
 import { simulationJobOptions, type SimulationJobData } from '../../jobs/processors/simulationProcessor';
 import { auditService } from '../../services/audit/auditService';
-import { redis } from '../../lib/redis';
-
-const prisma = new PrismaClient();
+import { getRedis } from '../../lib/redis.js';
+import { prisma } from '../../lib/prisma.js';
 
 // Initialize job queue
 const simulationQueue = new Queue<SimulationJobData>('simulation', {
-  connection: redis,
+  connection: getRedis(),
 });
 
 // Validation schemas

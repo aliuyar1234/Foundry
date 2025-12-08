@@ -5,10 +5,8 @@
  * Tracks and enforces data retention policies for compliance
  */
 
-import { PrismaClient } from '@prisma/client';
 import type { ComplianceFramework } from 'shared/types/compliance.js';
-
-const prisma = new PrismaClient();
+import { prisma } from '../../lib/prisma.js';
 
 // =============================================================================
 // Types

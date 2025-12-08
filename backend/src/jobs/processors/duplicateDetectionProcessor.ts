@@ -5,7 +5,6 @@
 
 import { Job } from 'bullmq';
 import { Pool } from 'pg';
-import { PrismaClient } from '@prisma/client';
 import { BaseProcessor } from './baseProcessor.js';
 import {
   EntityRecordService,
@@ -23,6 +22,7 @@ import {
   STANDARD_MATCH_CONFIGS,
   MatchResult,
 } from '../../services/preparation/matching/index.js';
+import { prisma } from '../../lib/prisma.js';
 
 export interface DuplicateDetectionJobData {
   organizationId: string;
@@ -65,14 +65,12 @@ export class DuplicateDetectionProcessor extends BaseProcessor<
   DuplicateDetectionJobResult
 > {
   private pool: Pool;
-  private prisma: PrismaClient;
   private entityRecordService: EntityRecordService;
 
   constructor() {
     super('duplicate-detection');
     this.pool = new Pool({ connectionString: process.env.TIMESCALE_URL });
-    this.prisma = new PrismaClient();
-    this.entityRecordService = createEntityRecordService(this.pool, this.prisma);
+    this.entityRecordService = createEntityRecordService(this.pool, prisma);
   }
 
   async process(job: Job<DuplicateDetectionJobData>): Promise<DuplicateDetectionJobResult> {
@@ -411,7 +409,7 @@ export class DuplicateDetectionProcessor extends BaseProcessor<
 
   async cleanup(): Promise<void> {
     await this.pool.end();
-    await this.prisma.$disconnect();
+    // Prisma singleton is managed centrally - no need to disconnect here
   }
 }
 

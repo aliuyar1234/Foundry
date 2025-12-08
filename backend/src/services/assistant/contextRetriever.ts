@@ -3,11 +3,9 @@
  * T066 - Create knowledge graph context retriever
  */
 
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../../lib/prisma.js';
 import { logger } from '../../lib/logger.js';
 import { getDriver } from '../../graph/driver.js';
-
-const prisma = new PrismaClient();
 
 // =============================================================================
 // Types

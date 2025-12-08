@@ -4,11 +4,9 @@
  * T282 - Change tracking and versioning
  */
 
-import { PrismaClient } from '@prisma/client';
 import { v4 as uuidv4 } from 'uuid';
 import { MasterRecord } from './masterRecordService.js';
-
-const prisma = new PrismaClient();
+import { prisma } from '../../lib/prisma.js';
 
 export type ChangeType = 'create' | 'update' | 'delete' | 'merge' | 'sync';
 

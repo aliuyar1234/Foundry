@@ -5,7 +5,7 @@
  * Analyzes workload and suggests how to redistribute tasks
  */
 
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../../lib/prisma.js';
 
 // =============================================================================
 // Types
@@ -78,8 +78,6 @@ export interface RedistributionConstraints {
 // =============================================================================
 // Redistribution Suggester
 // =============================================================================
-
-const prisma = new PrismaClient();
 
 /**
  * Generate redistribution suggestions for a team

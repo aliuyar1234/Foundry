@@ -13,10 +13,9 @@ import { ScimService } from '../../services/sso/scimService';
 import { RoleMappingService } from '../../services/sso/roleMappingService';
 import { DirectorySyncService } from '../../services/sso/directorySyncService';
 import { requireAuth, requireRole, requireEntityAccess } from '../middleware/auth';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../../lib/prisma.js';
 
 const router = Router();
-const prisma = new PrismaClient();
 const samlService = new SamlService(prisma);
 const oidcService = new OidcService(prisma);
 const roleMappingService = new RoleMappingService(prisma);

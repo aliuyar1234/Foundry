@@ -7,6 +7,9 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { prisma } from '../../lib/prisma.js';
 import { neo4jDriver } from '../../graph/connection.js';
 import { Redis } from 'ioredis';
+import { getAllCircuitBreakerStats } from '../../lib/circuitBreaker.js';
+import { getRedisHealthMetrics } from '../../lib/redis.js';
+import { tokenRevocationService } from '../../services/security/tokenRevocation.js';
 
 // Health check result types
 interface HealthStatus {
@@ -15,6 +18,11 @@ interface HealthStatus {
   version: string;
   uptime: number;
   checks: ComponentCheck[];
+  circuitBreakers?: ReturnType<typeof getAllCircuitBreakerStats>;
+  redis?: ReturnType<typeof getRedisHealthMetrics>;
+  security?: {
+    revocationFailures: number;
+  };
 }
 
 interface ComponentCheck {
@@ -99,12 +107,22 @@ export default async function healthRoutes(fastify: FastifyInstance) {
         status = 'healthy';
       }
 
+      // Get additional metrics for detailed health status
+      const circuitBreakers = getAllCircuitBreakerStats();
+      const redisMetrics = getRedisHealthMetrics();
+      const revocationFailures = await tokenRevocationService.getRevocationFailureCount();
+
       const healthStatus: HealthStatus = {
         status,
         timestamp: new Date().toISOString(),
         version: APP_VERSION,
         uptime: Math.floor((Date.now() - startTime) / 1000),
         checks,
+        circuitBreakers: circuitBreakers.length > 0 ? circuitBreakers : undefined,
+        redis: redisMetrics,
+        security: {
+          revocationFailures: revocationFailures >= 0 ? revocationFailures : 0,
+        },
       };
 
       // Return 503 if unhealthy, 200 otherwise
@@ -246,11 +264,13 @@ async function checkPostgres(): Promise<ComponentCheck> {
       message: 'Connected',
     };
   } catch (error) {
+    // Log full error server-side, return generic message to client
+    console.error('PostgreSQL health check failed:', error);
     return {
       name: 'postgresql',
       status: 'fail',
       responseTime: Date.now() - start,
-      message: error instanceof Error ? error.message : 'Connection failed',
+      message: 'Connection failed',
     };
   }
 }
@@ -275,11 +295,13 @@ async function checkNeo4j(): Promise<ComponentCheck> {
       await session.close();
     }
   } catch (error) {
+    // Log full error server-side, return generic message to client
+    console.error('Neo4j health check failed:', error);
     return {
       name: 'neo4j',
       status: 'fail',
       responseTime: Date.now() - start,
-      message: error instanceof Error ? error.message : 'Connection failed',
+      message: 'Connection failed',
     };
   }
 }
@@ -316,11 +338,13 @@ async function checkRedis(): Promise<ComponentCheck> {
       },
     };
   } catch (error) {
+    // Log full error server-side, return generic message to client
+    console.error('Redis health check failed:', error);
     return {
       name: 'redis',
       status: 'fail',
       responseTime: Date.now() - start,
-      message: error instanceof Error ? error.message : 'Connection failed',
+      message: 'Connection failed',
     };
   }
 }
@@ -518,9 +542,11 @@ export async function checkClaudeAPI(): Promise<ComponentCheck> {
     };
   } catch (error) {
     const responseTime = Date.now() - start;
-    const errorMessage = error instanceof Error ? error.message : 'Connection failed';
+    // Log full error server-side
+    console.error('Claude API health check failed:', error);
 
-    // Check for timeout
+    // Check for timeout (safe to mention)
+    const errorMessage = error instanceof Error ? error.message.toLowerCase() : '';
     if (errorMessage.includes('timeout') || errorMessage.includes('aborted')) {
       return {
         name: 'claude_api',
@@ -530,11 +556,12 @@ export async function checkClaudeAPI(): Promise<ComponentCheck> {
       };
     }
 
+    // Return generic message for other errors
     return {
       name: 'claude_api',
       status: 'fail',
       responseTime,
-      message: errorMessage,
+      message: 'Connection failed',
     };
   }
 }
@@ -613,11 +640,12 @@ export async function checkSSEConnections(): Promise<ComponentCheck> {
       },
     };
   } catch (error) {
+    console.error('SSE connections check failed:', error);
     return {
       name: 'sse_connections',
       status: 'fail',
       responseTime: Date.now() - start,
-      message: error instanceof Error ? error.message : 'Failed to get SSE stats',
+      message: 'Failed to get SSE stats',
     };
   }
 }
@@ -670,11 +698,12 @@ export async function checkSSEMemory(): Promise<ComponentCheck> {
       },
     };
   } catch (error) {
+    console.error('SSE memory check failed:', error);
     return {
       name: 'sse_memory',
       status: 'fail',
       responseTime: Date.now() - start,
-      message: error instanceof Error ? error.message : 'Failed to check SSE memory',
+      message: 'Failed to check SSE memory',
     };
   }
 }

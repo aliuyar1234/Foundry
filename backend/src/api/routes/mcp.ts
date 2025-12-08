@@ -1,6 +1,10 @@
 /**
  * MCP API Routes for Session Management (T059)
  * Endpoints for creating and managing MCP sessions
+ *
+ * SECURITY: All routes require authentication (applied globally in routes/index.ts)
+ * SECURITY: RBAC permission checks applied per-endpoint
+ * SECURITY: Input validation via Fastify JSON Schema
  */
 
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
@@ -8,6 +12,46 @@ import { getMcpSessionService } from '../../services/mcp/session.service.js';
 import { getMcpAuditService } from '../../services/mcp/audit.js';
 import { logger } from '../../lib/logger.js';
 import { MCP_SCOPES, MCP_SCOPE_GROUPS, isValidScope } from '../../models/McpSession.js';
+import { getOrganizationId } from '../middleware/organization.js';
+import { requirePermission } from '../middleware/permissions.js';
+
+// =============================================================================
+// Validation Schemas (Fastify JSON Schema)
+// =============================================================================
+
+const createSessionSchema = {
+  type: 'object',
+  required: ['clientName'],
+  properties: {
+    clientName: { type: 'string', minLength: 1, maxLength: 200 },
+    clientVersion: { type: 'string', maxLength: 50 },
+    scopes: { type: 'array', items: { type: 'string', maxLength: 100 }, maxItems: 50 },
+    ttlSeconds: { type: 'integer', minimum: 60, maximum: 86400 }, // 1 min to 24 hours
+  },
+  additionalProperties: false,
+} as const;
+
+const sessionIdParamSchema = {
+  type: 'object',
+  required: ['sessionId'],
+  properties: {
+    sessionId: { type: 'string', minLength: 1, maxLength: 100, pattern: '^[a-zA-Z0-9_-]+$' },
+  },
+} as const;
+
+const auditQuerySchema = {
+  type: 'object',
+  properties: {
+    startDate: { type: 'string', format: 'date-time' },
+    endDate: { type: 'string', format: 'date-time' },
+    limit: { type: 'string', pattern: '^[0-9]+$' },
+    offset: { type: 'string', pattern: '^[0-9]+$' },
+  },
+} as const;
+
+// =============================================================================
+// Request body types (for TypeScript)
+// =============================================================================
 
 /**
  * Request body types
@@ -33,21 +77,21 @@ export async function mcpRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * Create a new MCP session
    * POST /api/v1/mcp/sessions
+   * Requires: aiAssistant.create permission (ANALYST role minimum)
    */
   fastify.post(
     '/sessions',
+    {
+      schema: { body: createSessionSchema },
+      preHandler: [requirePermission('aiAssistant', 'create')],
+    },
     async (request: FastifyRequest<{ Body: CreateSessionBody }>, reply: FastifyReply) => {
       try {
         const { clientName, clientVersion, scopes, ttlSeconds } = request.body;
         const userId = (request as any).userId;
         const ipAddress = request.ip || request.headers['x-forwarded-for'] as string || 'unknown';
 
-        if (!clientName) {
-          return reply.status(400).send({
-            success: false,
-            error: 'clientName is required',
-          });
-        }
+        // Schema validation handles clientName required check
 
         // Validate scopes
         const requestedScopes = scopes || MCP_SCOPE_GROUPS.STANDARD;
@@ -99,9 +143,11 @@ export async function mcpRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * List sessions for current user
    * GET /api/v1/mcp/sessions
+   * Requires: aiAssistant.read permission (VIEWER role minimum)
    */
   fastify.get(
     '/sessions',
+    { preHandler: [requirePermission('aiAssistant', 'read')] },
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
         const userId = (request as any).userId;
@@ -133,9 +179,14 @@ export async function mcpRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * Get session details
    * GET /api/v1/mcp/sessions/:sessionId
+   * Requires: aiAssistant.read permission (VIEWER role minimum)
    */
   fastify.get(
     '/sessions/:sessionId',
+    {
+      schema: { params: sessionIdParamSchema },
+      preHandler: [requirePermission('aiAssistant', 'read')],
+    },
     async (
       request: FastifyRequest<{ Params: { sessionId: string } }>,
       reply: FastifyReply
@@ -189,9 +240,14 @@ export async function mcpRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * Revoke a session
    * DELETE /api/v1/mcp/sessions/:sessionId
+   * Requires: aiAssistant.read permission (VIEWER role minimum - users can revoke their own)
    */
   fastify.delete(
     '/sessions/:sessionId',
+    {
+      schema: { params: sessionIdParamSchema },
+      preHandler: [requirePermission('aiAssistant', 'read')],
+    },
     async (
       request: FastifyRequest<{ Params: { sessionId: string } }>,
       reply: FastifyReply
@@ -231,8 +287,9 @@ export async function mcpRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * Get available scopes
    * GET /api/v1/mcp/scopes
+   * Requires: aiAssistant.read permission (VIEWER role minimum)
    */
-  fastify.get('/scopes', async (request, reply) => {
+  fastify.get('/scopes', { preHandler: [requirePermission('aiAssistant', 'read')] }, async (request, reply) => {
     return reply.send({
       success: true,
       data: {
@@ -245,13 +302,18 @@ export async function mcpRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * Get audit logs for user
    * GET /api/v1/mcp/audit
+   * Requires: auditLog.read permission (ADMIN role minimum)
    */
   fastify.get(
     '/audit',
+    {
+      schema: { querystring: auditQuerySchema },
+      preHandler: [requirePermission('auditLog', 'read')],
+    },
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
         const userId = (request as any).userId;
-        const tenantId = (request as any).tenantId || 'default';
+        const tenantId = getOrganizationId(request);
         const query = request.query as Record<string, string>;
 
         const { logs, total } = await auditService.queryLogs(
@@ -289,12 +351,17 @@ export async function mcpRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * Get audit statistics
    * GET /api/v1/mcp/audit/stats
+   * Requires: auditLog.read permission (ADMIN role minimum)
    */
   fastify.get(
     '/audit/stats',
+    {
+      schema: { querystring: auditQuerySchema },
+      preHandler: [requirePermission('auditLog', 'read')],
+    },
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
-        const tenantId = (request as any).tenantId || 'default';
+        const tenantId = getOrganizationId(request);
         const query = request.query as Record<string, string>;
 
         const stats = await auditService.getStats(tenantId, {
