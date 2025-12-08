@@ -1,0 +1,453 @@
+# GitHub Actions CI/CD Pipeline for Foundry
+# Place in .github/workflows/ci-cd.yaml
+
+name: Foundry CI/CD
+
+on:
+  push:
+    branches: [main, develop]
+    tags: ['v*']
+  pull_request:
+    branches: [main, develop]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  NODE_VERSION: '20'
+
+jobs:
+  # ============================================
+  # Lint and Type Check
+  # ============================================
+  lint:
+    name: Lint & Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run ESLint
+        run: npm run lint
+
+      - name: Run TypeScript check
+        run: npm run type-check
+
+      - name: Run Prettier check
+        run: npm run format:check
+
+  # ============================================
+  # Unit Tests
+  # ============================================
+  test-unit:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run unit tests
+        run: npm run test:unit -- --coverage
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./coverage/lcov.info
+          flags: unit
+
+  # ============================================
+  # Integration Tests
+  # ============================================
+  test-integration:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: foundry
+          POSTGRES_PASSWORD: testpassword
+          POSTGRES_DB: foundry_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      neo4j:
+        image: neo4j:5-community
+        env:
+          NEO4J_AUTH: neo4j/testpassword
+        ports:
+          - 7687:7687
+          - 7474:7474
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Wait for Neo4j
+        run: |
+          until curl -s http://localhost:7474 > /dev/null; do
+            sleep 5
+          done
+
+      - name: Run database migrations
+        run: npm run prisma:migrate:deploy
+        env:
+          DATABASE_URL: postgresql://foundry:testpassword@localhost:5432/foundry_test
+
+      - name: Run integration tests
+        run: npm run test:integration
+        env:
+          DATABASE_URL: postgresql://foundry:testpassword@localhost:5432/foundry_test
+          NEO4J_URI: bolt://localhost:7687
+          NEO4J_USER: neo4j
+          NEO4J_PASSWORD: testpassword
+          REDIS_URL: redis://localhost:6379
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./coverage/lcov.info
+          flags: integration
+
+  # ============================================
+  # E2E Tests
+  # ============================================
+  test-e2e:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    needs: [lint, test-unit]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps
+
+      - name: Start services
+        run: docker compose -f docker-compose.test.yaml up -d
+
+      - name: Wait for services
+        run: |
+          npm run wait-for-services
+          sleep 10
+
+      - name: Run E2E tests
+        run: npm run test:e2e
+
+      - name: Upload test artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+
+      - name: Stop services
+        if: always()
+        run: docker compose -f docker-compose.test.yaml down
+
+  # ============================================
+  # Security Scan
+  # ============================================
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '1'
+
+      - name: Run npm audit
+        run: npm audit --audit-level=high
+
+      - name: Run SAST scan
+        uses: github/codeql-action/analyze@v2
+
+  # ============================================
+  # Build Docker Images
+  # ============================================
+  build:
+    name: Build Images
+    runs-on: ubuntu-latest
+    needs: [lint, test-unit, test-integration]
+    permissions:
+      contents: read
+      packages: write
+
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      tags: ${{ steps.meta.outputs.tags }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha
+
+      # Build Backend
+      - name: Build and push backend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:${{ steps.meta.outputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            VERSION=${{ steps.meta.outputs.version }}
+
+      # Build Frontend
+      - name: Build and push frontend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend:${{ steps.meta.outputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            VERSION=${{ steps.meta.outputs.version }}
+            REACT_APP_API_URL=/api
+
+  # ============================================
+  # Deploy to Staging
+  # ============================================
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: [build, test-e2e, security]
+    if: github.ref == 'refs/heads/develop'
+    environment:
+      name: staging
+      url: https://staging.foundry.io
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: v3.12.0
+
+      - name: Configure kubectl
+        uses: azure/k8s-set-context@v3
+        with:
+          kubeconfig: ${{ secrets.STAGING_KUBECONFIG }}
+
+      - name: Deploy to staging
+        run: |
+          helm upgrade --install foundry ./deployment/helm/foundry \
+            --namespace foundry-staging \
+            --create-namespace \
+            --values ./deployment/helm/values-staging.yaml \
+            --set global.imageTag=${{ needs.build.outputs.version }} \
+            --wait --timeout 10m
+
+      - name: Run smoke tests
+        run: |
+          kubectl exec deployment/foundry-backend -n foundry-staging -- \
+            npm run test:smoke
+
+      - name: Notify Slack
+        if: always()
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          channel: '#foundry-deployments'
+          fields: repo,message,commit,author,action,eventName,workflow
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
+
+  # ============================================
+  # Deploy to Production
+  # ============================================
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [build, test-e2e, security]
+    if: startsWith(github.ref, 'refs/tags/v')
+    environment:
+      name: production
+      url: https://foundry.io
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: v3.12.0
+
+      - name: Configure kubectl
+        uses: azure/k8s-set-context@v3
+        with:
+          kubeconfig: ${{ secrets.PRODUCTION_KUBECONFIG }}
+
+      - name: Create pre-deploy backup
+        run: |
+          kubectl exec deployment/foundry-backend -n foundry -- \
+            /scripts/backup.sh pre-deploy-${{ needs.build.outputs.version }}
+
+      - name: Deploy to production (canary)
+        run: |
+          helm upgrade --install foundry ./deployment/helm/foundry \
+            --namespace foundry \
+            --values ./deployment/helm/values-production.yaml \
+            --set global.imageTag=${{ needs.build.outputs.version }} \
+            --set canary.enabled=true \
+            --set canary.weight=10 \
+            --wait --timeout 10m
+
+      - name: Monitor canary (5 min)
+        run: |
+          for i in {1..5}; do
+            ERROR_RATE=$(kubectl exec deployment/foundry-backend -n foundry -- \
+              curl -s localhost:9090/metrics | grep 'http_requests_total{.*status="5' | awk '{sum+=$2} END {print sum+0}')
+            echo "Minute $i: Error count = $ERROR_RATE"
+            if [ "$ERROR_RATE" -gt 100 ]; then
+              echo "High error rate detected. Rolling back..."
+              helm rollback foundry -n foundry
+              exit 1
+            fi
+            sleep 60
+          done
+
+      - name: Promote to full deployment
+        run: |
+          helm upgrade foundry ./deployment/helm/foundry \
+            --namespace foundry \
+            --values ./deployment/helm/values-production.yaml \
+            --set global.imageTag=${{ needs.build.outputs.version }} \
+            --set canary.enabled=false \
+            --wait --timeout 10m
+
+      - name: Run post-deploy verification
+        run: |
+          kubectl exec deployment/foundry-backend -n foundry -- \
+            npm run test:smoke
+          kubectl exec deployment/foundry-backend -n foundry -- \
+            npm run verify:deployment
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          generate_release_notes: true
+          files: |
+            CHANGELOG.md
+
+      - name: Notify Slack
+        if: always()
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          channel: '#foundry-deployments'
+          fields: repo,message,commit,author,action,eventName,workflow
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
+
+  # ============================================
+  # Rollback (Manual Trigger)
+  # ============================================
+  rollback:
+    name: Rollback Production
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    environment:
+      name: production
+
+    steps:
+      - name: Configure kubectl
+        uses: azure/k8s-set-context@v3
+        with:
+          kubeconfig: ${{ secrets.PRODUCTION_KUBECONFIG }}
+
+      - name: Rollback deployment
+        run: |
+          helm rollback foundry -n foundry
+          kubectl rollout status deployment/foundry-backend -n foundry
+
+      - name: Verify rollback
+        run: |
+          kubectl exec deployment/foundry-backend -n foundry -- \
+            curl -s localhost:3000/health
+
+      - name: Notify Slack
+        uses: 8398a7/action-slack@v3
+        with:
+          status: 'warning'
+          text: 'Production rollback completed'
+          channel: '#foundry-deployments'
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}

@@ -173,6 +173,45 @@ async function createIndexes(session: Session): Promise<void> {
 
     `CREATE INDEX person_skills IF NOT EXISTS
      FOR (p:Person) ON (p.primarySkills)`,
+
+    // ==========================================================================
+    // SCALE Tier - Multi-Entity Indexes (T010-T012)
+    // ==========================================================================
+
+    // T010: Entity-scoped indexes for all node types
+    `CREATE INDEX person_entity IF NOT EXISTS
+     FOR (p:Person) ON (p.entityId)`,
+
+    `CREATE INDEX process_entity IF NOT EXISTS
+     FOR (p:Process) ON (p.entityId)`,
+
+    `CREATE INDEX processstep_entity IF NOT EXISTS
+     FOR (ps:ProcessStep) ON (ps.entityId)`,
+
+    `CREATE INDEX event_entity IF NOT EXISTS
+     FOR (e:Event) ON (e.entityId)`,
+
+    `CREATE INDEX document_entity IF NOT EXISTS
+     FOR (d:Document) ON (d.entityId)`,
+
+    `CREATE INDEX expertiseprofile_entity IF NOT EXISTS
+     FOR (ep:ExpertiseProfile) ON (ep.entityId)`,
+
+    `CREATE INDEX workloadsnapshot_entity IF NOT EXISTS
+     FOR (ws:WorkloadSnapshot) ON (ws.entityId)`,
+
+    // T011: Composite indexes for entity-scoped queries
+    `CREATE INDEX person_entity_dept IF NOT EXISTS
+     FOR (p:Person) ON (p.entityId, p.department)`,
+
+    `CREATE INDEX process_entity_name IF NOT EXISTS
+     FOR (p:Process) ON (p.entityId, p.name)`,
+
+    `CREATE INDEX event_entity_type IF NOT EXISTS
+     FOR (e:Event) ON (e.entityId, e.type)`,
+
+    `CREATE INDEX event_entity_timestamp IF NOT EXISTS
+     FOR (e:Event) ON (e.entityId, p.timestamp)`,
   ];
 
   for (const index of indexes) {

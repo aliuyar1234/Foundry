@@ -1,0 +1,328 @@
+# =============================================================================
+# Foundry Helm Chart - Default Values
+# SCALE Tier - Task T154
+#
+# Default configuration values for the Foundry Helm chart
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Global Configuration
+# -----------------------------------------------------------------------------
+global:
+  imageRegistry: ""
+  imagePullSecrets: []
+  storageClass: ""
+
+# -----------------------------------------------------------------------------
+# Backend Configuration
+# -----------------------------------------------------------------------------
+backend:
+  replicaCount: 2
+
+  image:
+    repository: foundry/backend
+    tag: ""
+    pullPolicy: IfNotPresent
+
+  service:
+    type: ClusterIP
+    port: 3000
+
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+  env: {}
+  envFrom: []
+
+  livenessProbe:
+    enabled: true
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+  readinessProbe:
+    enabled: true
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+# -----------------------------------------------------------------------------
+# Frontend Configuration
+# -----------------------------------------------------------------------------
+frontend:
+  replicaCount: 2
+
+  image:
+    repository: foundry/frontend
+    tag: ""
+    pullPolicy: IfNotPresent
+
+  service:
+    type: ClusterIP
+    port: 80
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 70
+
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# -----------------------------------------------------------------------------
+# Worker Configuration (Background Jobs)
+# -----------------------------------------------------------------------------
+worker:
+  replicaCount: 2
+
+  image:
+    repository: foundry/backend
+    tag: ""
+    pullPolicy: IfNotPresent
+
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 80
+
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# -----------------------------------------------------------------------------
+# Ingress Configuration
+# -----------------------------------------------------------------------------
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+  hosts:
+    - host: app.foundry.example.com
+      paths:
+        - path: /api
+          pathType: Prefix
+          backend: backend
+        - path: /
+          pathType: Prefix
+          backend: frontend
+  tls:
+    - secretName: foundry-tls
+      hosts:
+        - app.foundry.example.com
+
+# -----------------------------------------------------------------------------
+# PostgreSQL Configuration
+# -----------------------------------------------------------------------------
+postgresql:
+  enabled: true
+  auth:
+    username: foundry
+    database: foundry
+    existingSecret: foundry-postgres-secret
+  primary:
+    persistence:
+      enabled: true
+      size: 50Gi
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: 1000m
+        memory: 2Gi
+
+# External PostgreSQL (when postgresql.enabled=false)
+externalDatabase:
+  host: ""
+  port: 5432
+  database: foundry
+  existingSecret: ""
+  existingSecretKey: password
+
+# -----------------------------------------------------------------------------
+# Redis Configuration
+# -----------------------------------------------------------------------------
+redis:
+  enabled: true
+  architecture: standalone
+  auth:
+    enabled: true
+    existingSecret: foundry-redis-secret
+    existingSecretPasswordKey: password
+  master:
+    persistence:
+      enabled: true
+      size: 8Gi
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+# External Redis (when redis.enabled=false)
+externalRedis:
+  host: ""
+  port: 6379
+  existingSecret: ""
+  existingSecretKey: password
+
+# -----------------------------------------------------------------------------
+# Neo4j Configuration
+# -----------------------------------------------------------------------------
+neo4j:
+  enabled: false  # Use external Neo4j by default
+  standalone: true
+  neo4jPassword: ""
+  existingSecret: foundry-neo4j-secret
+  volumes:
+    data:
+      mode: defaultStorageClass
+      size: 50Gi
+
+externalNeo4j:
+  host: ""
+  port: 7687
+  existingSecret: ""
+  existingSecretKey: password
+
+# -----------------------------------------------------------------------------
+# Vector Database (Qdrant) Configuration
+# -----------------------------------------------------------------------------
+qdrant:
+  enabled: false
+  replicaCount: 1
+  persistence:
+    enabled: true
+    size: 10Gi
+
+externalQdrant:
+  host: ""
+  port: 6333
+
+# -----------------------------------------------------------------------------
+# Secrets Configuration
+# -----------------------------------------------------------------------------
+secrets:
+  # If true, chart creates secrets. If false, use existing secrets
+  create: true
+
+  # Name of existing secrets (when secrets.create=false)
+  existingSecrets:
+    jwt: ""
+    encryption: ""
+    oauth: ""
+    azure: ""
+    openai: ""
+
+# -----------------------------------------------------------------------------
+# ConfigMap Configuration
+# -----------------------------------------------------------------------------
+config:
+  logLevel: info
+  corsOrigins: ""
+  enableAnalytics: true
+  enableProcessDiscovery: true
+  enableAiInsights: true
+  rateLimitWindowMs: 900000
+  rateLimitMaxRequests: 100
+
+# -----------------------------------------------------------------------------
+# Service Account
+# -----------------------------------------------------------------------------
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+# -----------------------------------------------------------------------------
+# Pod Security Context
+# -----------------------------------------------------------------------------
+podSecurityContext:
+  fsGroup: 1000
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  capabilities:
+    drop:
+      - ALL
+
+# -----------------------------------------------------------------------------
+# Network Policies
+# -----------------------------------------------------------------------------
+networkPolicy:
+  enabled: true
+  ingressRules: []
+  egressRules: []
+
+# -----------------------------------------------------------------------------
+# Pod Disruption Budget
+# -----------------------------------------------------------------------------
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# -----------------------------------------------------------------------------
+# Monitoring
+# -----------------------------------------------------------------------------
+metrics:
+  enabled: true
+  serviceMonitor:
+    enabled: false
+    interval: 30s
+    scrapeTimeout: 10s
+
+# -----------------------------------------------------------------------------
+# Backup Configuration
+# -----------------------------------------------------------------------------
+backup:
+  enabled: false
+  schedule: "0 2 * * *"
+  retention: 30
+  s3:
+    bucket: ""
+    region: ""
+    existingSecret: ""

@@ -74,3 +74,25 @@ export {
   getTermInfo,
   BUSINESS_TERMS,
 } from './terminologyMapper.js';
+
+// Data masking (T241)
+export {
+  configure as configureDataMasker,
+  getConfig as getDataMaskerConfig,
+  getActiveRules as getMaskingRules,
+  addCustomRule as addMaskingRule,
+  removeCustomRule as removeMaskingRule,
+  containsSensitiveData,
+  detectSensitiveCategories,
+  maskSensitiveData,
+  maskAIResponse,
+  partialMask,
+  hashSensitiveData,
+  validateMasking,
+  getMaskingStats,
+  onMasked,
+  type MaskingRule,
+  type SensitiveDataCategory,
+  type MaskingResult,
+  type MaskingConfig,
+} from './dataMasker.js';

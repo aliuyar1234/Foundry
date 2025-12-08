@@ -1,0 +1,52 @@
+# =============================================================================
+# Foundry Pod Disruption Budgets
+# SCALE Tier - Task T161
+#
+# Kubernetes PDBs for high availability during updates/maintenance
+# =============================================================================
+
+{{- if .Values.podDisruptionBudget.enabled }}
+
+---
+# Backend PDB
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "foundry.fullname" . }}-backend
+  labels:
+    {{- include "foundry.backend.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "foundry.backend.selectorLabels" . | nindent 6 }}
+
+---
+# Frontend PDB
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "foundry.fullname" . }}-frontend
+  labels:
+    {{- include "foundry.frontend.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "foundry.frontend.selectorLabels" . | nindent 6 }}
+
+---
+# Worker PDB
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "foundry.fullname" . }}-worker
+  labels:
+    {{- include "foundry.worker.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "foundry.worker.selectorLabels" . | nindent 6 }}
+
+{{- end }}

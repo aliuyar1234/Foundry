@@ -1,0 +1,119 @@
+# =============================================================================
+# Foundry Worker Deployment
+# SCALE Tier - Task T155
+#
+# Kubernetes deployment for the Foundry background worker
+# =============================================================================
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "foundry.fullname" . }}-worker
+  labels:
+    {{- include "foundry.worker.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.worker.autoscaling.enabled }}
+  replicas: {{ .Values.worker.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "foundry.worker.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secrets: {{ include (print $.Template.BasePath "/secrets.yaml") . | sha256sum }}
+      labels:
+        {{- include "foundry.worker.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "foundry.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: worker
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: {{ include "foundry.worker.image" . }}
+          imagePullPolicy: {{ .Values.worker.image.pullPolicy }}
+          command: ["node", "dist/jobs/worker.js"]
+          livenessProbe:
+            exec:
+              command:
+                - node
+                - -e
+                - "process.exit(0)"
+            initialDelaySeconds: 30
+            periodSeconds: 60
+            timeoutSeconds: 10
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.worker.resources | nindent 12 }}
+          env:
+            - name: NODE_ENV
+              value: "production"
+            # Database credentials from secrets
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "foundry.postgresql.secretName" . }}
+                  key: password
+            - name: DATABASE_URL
+              value: {{ include "foundry.databaseUrl" . | quote }}
+            # Redis credentials
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "foundry.redis.secretName" . }}
+                  key: {{ .Values.redis.auth.existingSecretPasswordKey | default "password" }}
+            - name: REDIS_URL
+              value: {{ include "foundry.redisUrl" . | quote }}
+            # Neo4j credentials
+            - name: NEO4J_URI
+              value: {{ include "foundry.neo4jUri" . | quote }}
+            - name: NEO4J_USER
+              value: "neo4j"
+            - name: NEO4J_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.neo4j.existingSecret | default (printf "%s-neo4j-secret" (include "foundry.fullname" .)) }}
+                  key: password
+            # OpenAI
+            {{- if .Values.secrets.existingSecrets.openai }}
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecrets.openai }}
+                  key: apiKey
+            {{- end }}
+            # Qdrant (if enabled)
+            {{- if or .Values.qdrant.enabled .Values.externalQdrant.host }}
+            - name: QDRANT_HOST
+              value: {{ include "foundry.qdrant.host" . | quote }}
+            - name: QDRANT_PORT
+              value: {{ include "foundry.qdrant.port" . | quote }}
+            {{- end }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "foundry.fullname" . }}-config
+          volumeMounts:
+            - name: logs
+              mountPath: /app/logs
+      volumes:
+        - name: logs
+          emptyDir: {}
+      {{- with .Values.worker.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.worker.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.worker.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

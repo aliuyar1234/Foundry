@@ -10,6 +10,7 @@ Foundry is a comprehensive enterprise platform that leverages artificial intelli
 
 - [Overview](#overview)
 - [Features](#features)
+- [Enterprise Features (SCALE Tier)](#enterprise-features-scale-tier)
 - [Architecture](#architecture)
 - [Tech Stack](#tech-stack)
 - [Getting Started](#getting-started)
@@ -90,6 +91,69 @@ Seamless integration with enterprise systems:
 - **GDPR Support**: Built-in data subject rights management
 - **Role-Based Access**: Granular permission controls
 - **Metadata Mode**: Analyze patterns without exposing content
+
+---
+
+## Enterprise Features (SCALE Tier)
+
+The SCALE tier transforms Foundry from a departmental tool into a strategic enterprise platform with advanced multi-tenancy, partner ecosystem, and deployment flexibility.
+
+### Multi-Entity Organization Support
+- **Hierarchical Entity Management**: Support for holding companies with multiple subsidiaries
+- **Data Isolation**: Row-Level Security (RLS) ensuring complete data separation between entities
+- **Cross-Entity Analytics**: Consolidated dashboards for executives with drill-down capability
+- **Entity-Specific Configuration**: Per-entity settings, branding, and user management
+- **GDPR-Compliant Deletion**: Entity-scoped data deletion without affecting other entities
+
+### Partner API & Ecosystem
+- **OAuth 2.0 Authentication**: Secure third-party application integration
+- **OpenAPI 3.0 Documentation**: Interactive API explorer with comprehensive examples
+- **Webhook System**: Real-time event notifications with HMAC signing
+- **Rate Limiting**: Tiered API access (Free: 100/hr, Standard: 1,000/hr, Premium: 10,000/hr)
+- **Partner Developer Portal**: Self-service app registration and API key management
+
+### White-Label & Reseller Support
+- **Complete Branding Control**: Custom logos, colors, typography, and CSS
+- **Custom Domain Support**: DNS verification and SSL certificate management
+- **Reseller Portal**: Customer management, subscription handling, and billing
+- **Revenue Tracking**: Commission calculation and itemized invoicing
+- **Multi-Tenant Isolation**: Complete branding separation per customer
+
+### On-Premise Deployment
+- **Docker Compose**: Production-ready containerized deployment
+- **Kubernetes Helm Chart**: Enterprise K8s deployment with configurable values
+- **Air-Gapped Support**: Fully offline deployment capability
+- **External Database Support**: Connect to existing PostgreSQL, Neo4j, and Redis
+- **Offline License Validation**: Cryptographic license verification without internet
+- **Update Management**: Admin-approved updates with scheduling
+
+### Cross-Company Intelligence
+- **Anonymous Benchmarking**: Industry comparison with k-anonymity protection
+- **GDPR-Compliant Opt-In**: Explicit consent with data preview
+- **Performance Recommendations**: AI-generated improvement suggestions
+- **Segment Matching**: Compare against peers by industry, size, and region
+- **24-Hour Opt-Out**: Complete data removal upon request
+
+### Enterprise SSO & Directory Integration
+- **SAML 2.0**: Azure AD, Okta, and standard SAML IdP support
+- **OIDC**: OpenID Connect federation with token validation
+- **SCIM 2.0 Provisioning**: Automated user creation, updates, and deactivation
+- **Group-Based Role Mapping**: AD/Azure AD group to Foundry role synchronization
+- **Session Management**: Forced logout and session termination capabilities
+
+### Enterprise Security & Compliance
+- **Comprehensive Audit Logging**: Tamper-evident logs with entity separation
+- **Data Classification**: Automatic PII detection and handling
+- **GDPR Compliance Tools**: Data subject requests, consent management, DPIAs
+- **Security Headers**: CSP, HSTS, X-Frame-Options, and more
+- **Vulnerability Scanning**: Input validation and SQL injection prevention
+
+### Performance & Scalability
+- **50+ Entity Support**: Less than 10% performance degradation at scale
+- **Query Optimization**: Materialized views and efficient cross-entity queries
+- **Connection Pooling**: Optimized database connections
+- **Caching Strategy**: Redis caching with entity-scoped invalidation
+- **Background Processing**: BullMQ job queues with entity isolation
 
 ---
 
@@ -259,11 +323,13 @@ foundry/
 ├── backend/
 │   ├── prisma/
 │   │   ├── schema.prisma          # Database schema
+│   │   ├── migrations/            # Database migrations (incl. RLS policies)
 │   │   └── timescale/             # TimescaleDB migrations
 │   ├── src/
 │   │   ├── api/
-│   │   │   ├── middleware/        # Auth, rate limiting, etc.
-│   │   │   └── routes/            # API endpoints
+│   │   │   ├── middleware/        # Auth, rate limiting, entity context, etc.
+│   │   │   ├── routes/            # API endpoints
+│   │   │   └── openapi/           # OpenAPI 3.0 specification
 │   │   ├── connectors/            # External system integrations
 │   │   │   ├── m365/              # Microsoft 365
 │   │   │   ├── google/            # Google Workspace
@@ -284,9 +350,19 @@ foundry/
 │   │   │   ├── analysis/          # Network & debt analysis
 │   │   │   ├── discovery/         # Process discovery
 │   │   │   ├── privacy/           # Privacy controls
-│   │   │   └── ...
+│   │   │   ├── multiTenant/       # Entity management & isolation
+│   │   │   ├── partner/           # Partner API & OAuth
+│   │   │   ├── whiteLabel/        # White-label & reseller
+│   │   │   ├── sso/               # SAML, OIDC, SCIM
+│   │   │   ├── benchmark/         # Cross-company intelligence
+│   │   │   ├── gdpr/              # GDPR compliance tools
+│   │   │   ├── audit/             # Audit logging
+│   │   │   └── licensing/         # License validation
 │   │   └── server.ts              # Application entry point
 │   └── tests/
+│       ├── unit/                  # Unit tests
+│       ├── integration/           # Integration tests
+│       └── contracts/             # Contract tests (Pact)
 ├── frontend/
 │   ├── src/
 │   │   ├── components/
@@ -294,16 +370,47 @@ foundry/
 │   │   │   ├── command-center/    # Dashboard widgets
 │   │   │   ├── routing/           # Routing UI
 │   │   │   ├── discovery/         # Process visualization
+│   │   │   ├── entity/            # Entity management
+│   │   │   ├── partner/           # Partner portal
+│   │   │   ├── reseller/          # Reseller dashboard
+│   │   │   ├── benchmarks/        # Benchmark visualizations
+│   │   │   ├── enterprise/        # Enterprise components
+│   │   │   │   ├── loading/       # Loading states
+│   │   │   │   ├── error/         # Error boundaries
+│   │   │   │   ├── tours/         # Guided tours
+│   │   │   │   ├── accessibility/ # WCAG 2.1 AA utilities
+│   │   │   │   └── responsive/    # Mobile components
 │   │   │   └── ui/                # Base UI components
 │   │   ├── hooks/                 # Custom React hooks
+│   │   ├── i18n/                  # Internationalization (EN/DE)
 │   │   ├── pages/                 # Page components
+│   │   ├── providers/             # React context providers
 │   │   ├── services/              # API clients
 │   │   └── stores/                # State management
 │   └── tests/
 ├── shared/
 │   └── src/
 │       └── types/                 # Shared TypeScript types
+├── tests/
+│   └── e2e/                       # End-to-end tests (Playwright)
+│       ├── multiEntity.spec.ts    # Multi-entity tests
+│       ├── partnerApi.spec.ts     # Partner API tests
+│       ├── whiteLabel.spec.ts     # White-label tests
+│       ├── sso.spec.ts            # SSO tests
+│       ├── deployment.spec.ts     # Deployment tests
+│       ├── benchmarks.spec.ts     # Benchmark tests
+│       ├── userStoryValidation.spec.ts
+│       └── successCriteriaValidation.spec.ts
+├── deployment/
+│   ├── docker/                    # Docker Compose files
+│   ├── kubernetes/
+│   │   └── helm/foundry/          # Helm chart
+│   └── scripts/                   # Deployment scripts
 ├── docs/                          # Documentation
+│   ├── partner-api/               # Partner API docs
+│   └── deployment/                # Deployment guides
+├── specs/                         # Feature specifications
+│   └── 003-scale-enterprise/      # SCALE tier specification
 ├── docker-compose.yml             # Docker services
 └── package.json                   # Root package.json
 ```
@@ -352,6 +459,50 @@ GET    /api/data-sources                # List connected sources
 POST   /api/data-sources                # Connect new source
 POST   /api/data-sources/:id/sync       # Trigger sync
 DELETE /api/data-sources/:id            # Disconnect source
+```
+
+#### Multi-Entity Management (SCALE Tier)
+```
+GET    /api/entities                    # List entities
+POST   /api/entities                    # Create entity
+GET    /api/entities/:id                # Get entity details
+PUT    /api/entities/:id                # Update entity
+DELETE /api/entities/:id                # Archive entity
+GET    /api/entities/:id/hierarchy      # Get entity hierarchy
+GET    /api/entities/:id/analytics      # Cross-entity analytics
+```
+
+#### Partner API (SCALE Tier)
+```
+POST   /oauth/authorize                 # OAuth authorization
+POST   /oauth/token                     # Token exchange
+POST   /oauth/revoke                    # Revoke token
+GET    /api/partner/applications        # List partner apps
+POST   /api/partner/applications        # Register app
+POST   /api/partner/webhooks            # Subscribe to webhooks
+DELETE /api/partner/webhooks/:id        # Unsubscribe
+```
+
+#### SSO & SCIM (SCALE Tier)
+```
+GET    /api/sso/config                  # Get SSO configuration
+PUT    /api/sso/config                  # Update SSO configuration
+GET    /saml/metadata                   # SAML SP metadata
+POST   /saml/callback                   # SAML assertion callback
+GET    /oidc/callback                   # OIDC callback
+GET    /scim/v2/Users                   # SCIM list users
+POST   /scim/v2/Users                   # SCIM create user
+PATCH  /scim/v2/Users/:id               # SCIM update user
+DELETE /scim/v2/Users/:id               # SCIM delete user
+```
+
+#### Benchmarks (SCALE Tier)
+```
+POST   /api/organizations/:id/benchmark/opt-in   # Opt-in to benchmarks
+POST   /api/organizations/:id/benchmark/opt-out  # Opt-out
+GET    /api/organizations/:id/benchmark/status   # Get opt-in status
+GET    /api/organizations/:id/benchmark/compare  # Get comparisons
+GET    /api/organizations/:id/benchmark/recommendations  # Get suggestions
 ```
 
 ### Authentication
@@ -490,7 +641,7 @@ npm run test:integration
 
 ## Deployment
 
-### Docker Deployment
+### Docker Compose Deployment
 
 ```bash
 # Build images
@@ -500,14 +651,76 @@ docker-compose -f docker-compose.prod.yml build
 docker-compose -f docker-compose.prod.yml up -d
 ```
 
+### Kubernetes Deployment (Helm)
+
+```bash
+# Add the Foundry Helm repository
+helm repo add foundry https://charts.foundry.example.com
+
+# Install with default values
+helm install foundry foundry/foundry
+
+# Install with custom values
+helm install foundry foundry/foundry -f values.yaml
+
+# Upgrade existing installation
+helm upgrade foundry foundry/foundry -f values.yaml
+```
+
+### Air-Gapped Deployment
+
+For environments without internet access:
+
+```bash
+# Export images on connected machine
+./deployment/scripts/export-images.sh
+
+# Transfer images to air-gapped environment
+# Then import on target machine
+./deployment/scripts/import-images.sh
+
+# Deploy with offline license
+helm install foundry ./foundry-chart \
+  --set license.offline=true \
+  --set license.key="<offline-license-key>"
+```
+
+### External Database Configuration
+
+Connect to existing database infrastructure:
+
+```yaml
+# values.yaml
+postgresql:
+  external:
+    enabled: true
+    host: your-postgres-host
+    port: 5432
+    database: foundry
+    username: foundry_user
+    existingSecret: postgres-credentials
+
+neo4j:
+  external:
+    enabled: true
+    uri: bolt://your-neo4j-host:7687
+    existingSecret: neo4j-credentials
+
+redis:
+  external:
+    enabled: true
+    host: your-redis-host
+    port: 6379
+```
+
 ### Environment Requirements
 
-| Component | Minimum | Recommended |
-|-----------|---------|-------------|
-| CPU | 4 cores | 8+ cores |
-| RAM | 16 GB | 32+ GB |
-| Storage | 100 GB SSD | 500+ GB SSD |
-| Network | 100 Mbps | 1 Gbps |
+| Component | Minimum | Recommended | Enterprise (50+ entities) |
+|-----------|---------|-------------|---------------------------|
+| CPU | 4 cores | 8+ cores | 16+ cores |
+| RAM | 16 GB | 32+ GB | 64+ GB |
+| Storage | 100 GB SSD | 500+ GB SSD | 1+ TB SSD |
+| Network | 100 Mbps | 1 Gbps | 10 Gbps |
 
 ### Scaling Considerations
 
@@ -515,6 +728,7 @@ docker-compose -f docker-compose.prod.yml up -d
 - **Database Scaling**: Use read replicas for PostgreSQL and Neo4j
 - **Caching**: Redis cluster for high availability
 - **Job Processing**: Scale BullMQ workers based on queue depth
+- **Multi-Entity Performance**: Optimized for 50+ entities with <10% performance degradation
 
 ---
 

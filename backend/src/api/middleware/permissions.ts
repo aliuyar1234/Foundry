@@ -81,6 +81,80 @@ const PERMISSIONS: Permission[] = [
   // GDPR permissions
   { resource: 'gdpr', action: 'read', minRole: 'ADMIN' },
   { resource: 'gdpr', action: 'delete', minRole: 'OWNER' },
+
+  // ==========================================
+  // OPERATE Tier Permissions (T238-T240)
+  // ==========================================
+
+  // Routing permissions (T238)
+  { resource: 'routing', action: 'read', minRole: 'VIEWER' },
+  { resource: 'routing', action: 'create', minRole: 'ANALYST' },
+  { resource: 'routing', action: 'update', minRole: 'ADMIN' },
+  { resource: 'routing', action: 'delete', minRole: 'ADMIN' },
+  { resource: 'routing', action: 'manage', minRole: 'ADMIN' },
+  { resource: 'routingRules', action: 'read', minRole: 'VIEWER' },
+  { resource: 'routingRules', action: 'create', minRole: 'ADMIN' },
+  { resource: 'routingRules', action: 'update', minRole: 'ADMIN' },
+  { resource: 'routingRules', action: 'delete', minRole: 'ADMIN' },
+  { resource: 'routingDecisions', action: 'read', minRole: 'VIEWER' },
+  { resource: 'routingMetrics', action: 'read', minRole: 'VIEWER' },
+
+  // Compliance permissions (T239)
+  { resource: 'compliance', action: 'read', minRole: 'VIEWER' },
+  { resource: 'compliance', action: 'create', minRole: 'ANALYST' },
+  { resource: 'compliance', action: 'update', minRole: 'ADMIN' },
+  { resource: 'compliance', action: 'delete', minRole: 'ADMIN' },
+  { resource: 'compliance', action: 'manage', minRole: 'ADMIN' },
+  { resource: 'complianceRules', action: 'read', minRole: 'VIEWER' },
+  { resource: 'complianceRules', action: 'create', minRole: 'ADMIN' },
+  { resource: 'complianceRules', action: 'update', minRole: 'ADMIN' },
+  { resource: 'complianceRules', action: 'delete', minRole: 'OWNER' },
+  { resource: 'complianceChecks', action: 'read', minRole: 'VIEWER' },
+  { resource: 'complianceChecks', action: 'create', minRole: 'ANALYST' },
+  { resource: 'complianceReports', action: 'read', minRole: 'VIEWER' },
+  { resource: 'complianceReports', action: 'create', minRole: 'ANALYST' },
+  { resource: 'complianceExceptions', action: 'read', minRole: 'ANALYST' },
+  { resource: 'complianceExceptions', action: 'create', minRole: 'ADMIN' },
+  { resource: 'complianceExceptions', action: 'update', minRole: 'ADMIN' },
+
+  // Self-healing permissions (T240)
+  { resource: 'selfHealing', action: 'read', minRole: 'VIEWER' },
+  { resource: 'selfHealing', action: 'create', minRole: 'ADMIN' },
+  { resource: 'selfHealing', action: 'update', minRole: 'ADMIN' },
+  { resource: 'selfHealing', action: 'delete', minRole: 'OWNER' },
+  { resource: 'selfHealing', action: 'manage', minRole: 'ADMIN' },
+  { resource: 'healingPatterns', action: 'read', minRole: 'VIEWER' },
+  { resource: 'healingPatterns', action: 'create', minRole: 'ADMIN' },
+  { resource: 'healingPatterns', action: 'update', minRole: 'ADMIN' },
+  { resource: 'healingPatterns', action: 'delete', minRole: 'ADMIN' },
+  { resource: 'healingActions', action: 'read', minRole: 'VIEWER' },
+  { resource: 'healingActions', action: 'create', minRole: 'ADMIN' },
+  { resource: 'healingActions', action: 'update', minRole: 'ADMIN' },
+  { resource: 'healingExecutions', action: 'read', minRole: 'VIEWER' },
+  { resource: 'healingExecutions', action: 'create', minRole: 'ADMIN' },
+
+  // AI Assistant permissions
+  { resource: 'aiAssistant', action: 'read', minRole: 'VIEWER' },
+  { resource: 'aiAssistant', action: 'create', minRole: 'ANALYST' },
+  { resource: 'aiContext', action: 'read', minRole: 'ADMIN' },
+
+  // Command Center permissions
+  { resource: 'commandCenter', action: 'read', minRole: 'VIEWER' },
+  { resource: 'commandCenter', action: 'manage', minRole: 'ADMIN' },
+  { resource: 'dashboardMetrics', action: 'read', minRole: 'VIEWER' },
+  { resource: 'systemAlerts', action: 'read', minRole: 'VIEWER' },
+  { resource: 'systemAlerts', action: 'create', minRole: 'ANALYST' },
+  { resource: 'systemAlerts', action: 'update', minRole: 'ANALYST' },
+
+  // Workload management permissions
+  { resource: 'workload', action: 'read', minRole: 'VIEWER' },
+  { resource: 'workload', action: 'update', minRole: 'ANALYST' },
+  { resource: 'workload', action: 'manage', minRole: 'ADMIN' },
+  { resource: 'burnoutRisk', action: 'read', minRole: 'ANALYST' },
+  { resource: 'taskRedistribution', action: 'read', minRole: 'ANALYST' },
+  { resource: 'taskRedistribution', action: 'create', minRole: 'ADMIN' },
+  { resource: 'workloadSettings', action: 'read', minRole: 'VIEWER' },
+  { resource: 'workloadSettings', action: 'update', minRole: 'ADMIN' },
 ];
 
 /**

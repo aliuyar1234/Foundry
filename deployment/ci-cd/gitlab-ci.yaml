@@ -1,0 +1,353 @@
+# GitLab CI/CD Pipeline for Foundry
+# Place in .gitlab-ci.yml
+
+stages:
+  - lint
+  - test
+  - security
+  - build
+  - deploy-staging
+  - deploy-production
+
+variables:
+  NODE_VERSION: "20"
+  DOCKER_TLS_CERTDIR: "/certs"
+  REGISTRY: registry.gitlab.com
+  IMAGE_NAME: $CI_PROJECT_PATH
+
+# Cache configuration
+.node_cache: &node_cache
+  cache:
+    key:
+      files:
+        - package-lock.json
+    paths:
+      - node_modules/
+    policy: pull-push
+
+# Default image for Node.js jobs
+.node_job: &node_job
+  image: node:${NODE_VERSION}
+  <<: *node_cache
+  before_script:
+    - npm ci --cache .npm --prefer-offline
+
+# ============================================
+# Lint Stage
+# ============================================
+lint:
+  stage: lint
+  <<: *node_job
+  script:
+    - npm run lint
+    - npm run type-check
+    - npm run format:check
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH == "develop"
+
+# ============================================
+# Test Stage
+# ============================================
+test:unit:
+  stage: test
+  <<: *node_job
+  script:
+    - npm run test:unit -- --coverage
+  coverage: '/All files[^|]*\|[^|]*\s+([\d\.]+)/'
+  artifacts:
+    reports:
+      junit: junit.xml
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage/cobertura-coverage.xml
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH == "develop"
+
+test:integration:
+  stage: test
+  <<: *node_job
+  services:
+    - name: postgres:15
+      alias: postgres
+      variables:
+        POSTGRES_USER: foundry
+        POSTGRES_PASSWORD: testpassword
+        POSTGRES_DB: foundry_test
+
+    - name: redis:7
+      alias: redis
+
+    - name: neo4j:5-community
+      alias: neo4j
+      variables:
+        NEO4J_AUTH: neo4j/testpassword
+
+  variables:
+    DATABASE_URL: postgresql://foundry:testpassword@postgres:5432/foundry_test
+    NEO4J_URI: bolt://neo4j:7687
+    NEO4J_USER: neo4j
+    NEO4J_PASSWORD: testpassword
+    REDIS_URL: redis://redis:6379
+
+  script:
+    - npm run prisma:migrate:deploy
+    - npm run test:integration
+  artifacts:
+    reports:
+      junit: junit-integration.xml
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH == "develop"
+
+test:e2e:
+  stage: test
+  image: mcr.microsoft.com/playwright:v1.40.0
+  services:
+    - name: docker:dind
+      alias: docker
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+  before_script:
+    - npm ci
+    - docker compose -f docker-compose.test.yaml up -d
+    - sleep 30
+  script:
+    - npm run test:e2e
+  after_script:
+    - docker compose -f docker-compose.test.yaml down
+  artifacts:
+    when: always
+    paths:
+      - playwright-report/
+    reports:
+      junit: playwright-report/junit.xml
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH == "develop"
+
+# ============================================
+# Security Stage
+# ============================================
+security:sast:
+  stage: security
+  image: returntocorp/semgrep
+  script:
+    - semgrep --config=p/security-audit --config=p/typescript --json --output=semgrep.json .
+  artifacts:
+    reports:
+      sast: semgrep.json
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main"
+
+security:dependency:
+  stage: security
+  <<: *node_job
+  script:
+    - npm audit --audit-level=high --json > npm-audit.json || true
+    - cat npm-audit.json
+  artifacts:
+    reports:
+      dependency_scanning: npm-audit.json
+  allow_failure: true
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main"
+
+security:container:
+  stage: security
+  image:
+    name: aquasec/trivy:latest
+    entrypoint: [""]
+  script:
+    - trivy fs --severity CRITICAL,HIGH --exit-code 1 --format json --output trivy-report.json .
+  artifacts:
+    reports:
+      container_scanning: trivy-report.json
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_TAG
+
+# ============================================
+# Build Stage
+# ============================================
+build:backend:
+  stage: build
+  image: docker:24
+  services:
+    - docker:dind
+  variables:
+    DOCKER_TLS_CERTDIR: "/certs"
+  before_script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  script:
+    - docker build
+        --build-arg VERSION=$CI_COMMIT_SHORT_SHA
+        --tag $REGISTRY/$IMAGE_NAME/backend:$CI_COMMIT_SHORT_SHA
+        --tag $REGISTRY/$IMAGE_NAME/backend:$CI_COMMIT_REF_SLUG
+        --file backend/Dockerfile
+        ./backend
+    - docker push $REGISTRY/$IMAGE_NAME/backend:$CI_COMMIT_SHORT_SHA
+    - docker push $REGISTRY/$IMAGE_NAME/backend:$CI_COMMIT_REF_SLUG
+    - |
+      if [ -n "$CI_COMMIT_TAG" ]; then
+        docker tag $REGISTRY/$IMAGE_NAME/backend:$CI_COMMIT_SHORT_SHA $REGISTRY/$IMAGE_NAME/backend:$CI_COMMIT_TAG
+        docker tag $REGISTRY/$IMAGE_NAME/backend:$CI_COMMIT_SHORT_SHA $REGISTRY/$IMAGE_NAME/backend:latest
+        docker push $REGISTRY/$IMAGE_NAME/backend:$CI_COMMIT_TAG
+        docker push $REGISTRY/$IMAGE_NAME/backend:latest
+      fi
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH == "develop"
+    - if: $CI_COMMIT_TAG
+
+build:frontend:
+  stage: build
+  image: docker:24
+  services:
+    - docker:dind
+  variables:
+    DOCKER_TLS_CERTDIR: "/certs"
+  before_script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  script:
+    - docker build
+        --build-arg VERSION=$CI_COMMIT_SHORT_SHA
+        --build-arg REACT_APP_API_URL=/api
+        --tag $REGISTRY/$IMAGE_NAME/frontend:$CI_COMMIT_SHORT_SHA
+        --tag $REGISTRY/$IMAGE_NAME/frontend:$CI_COMMIT_REF_SLUG
+        --file frontend/Dockerfile
+        ./frontend
+    - docker push $REGISTRY/$IMAGE_NAME/frontend:$CI_COMMIT_SHORT_SHA
+    - docker push $REGISTRY/$IMAGE_NAME/frontend:$CI_COMMIT_REF_SLUG
+    - |
+      if [ -n "$CI_COMMIT_TAG" ]; then
+        docker tag $REGISTRY/$IMAGE_NAME/frontend:$CI_COMMIT_SHORT_SHA $REGISTRY/$IMAGE_NAME/frontend:$CI_COMMIT_TAG
+        docker tag $REGISTRY/$IMAGE_NAME/frontend:$CI_COMMIT_SHORT_SHA $REGISTRY/$IMAGE_NAME/frontend:latest
+        docker push $REGISTRY/$IMAGE_NAME/frontend:$CI_COMMIT_TAG
+        docker push $REGISTRY/$IMAGE_NAME/frontend:latest
+      fi
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH == "develop"
+    - if: $CI_COMMIT_TAG
+
+# ============================================
+# Deploy Staging
+# ============================================
+deploy:staging:
+  stage: deploy-staging
+  image:
+    name: alpine/helm:3.12.0
+    entrypoint: [""]
+  environment:
+    name: staging
+    url: https://staging.foundry.io
+  before_script:
+    - apk add --no-cache curl
+    - curl -LO "https://dl.k8s.io/release/v1.28.0/bin/linux/amd64/kubectl"
+    - chmod +x kubectl && mv kubectl /usr/local/bin/
+    - echo "$STAGING_KUBECONFIG" | base64 -d > /tmp/kubeconfig
+    - export KUBECONFIG=/tmp/kubeconfig
+  script:
+    - helm upgrade --install foundry ./deployment/helm/foundry
+        --namespace foundry-staging
+        --create-namespace
+        --values ./deployment/helm/values-staging.yaml
+        --set global.imageTag=$CI_COMMIT_SHORT_SHA
+        --set global.imageRegistry=$REGISTRY/$IMAGE_NAME
+        --wait --timeout 10m
+    - kubectl exec deployment/foundry-backend -n foundry-staging -- npm run test:smoke
+  rules:
+    - if: $CI_COMMIT_BRANCH == "develop"
+
+# ============================================
+# Deploy Production
+# ============================================
+deploy:production:
+  stage: deploy-production
+  image:
+    name: alpine/helm:3.12.0
+    entrypoint: [""]
+  environment:
+    name: production
+    url: https://foundry.io
+  when: manual
+  before_script:
+    - apk add --no-cache curl
+    - curl -LO "https://dl.k8s.io/release/v1.28.0/bin/linux/amd64/kubectl"
+    - chmod +x kubectl && mv kubectl /usr/local/bin/
+    - echo "$PRODUCTION_KUBECONFIG" | base64 -d > /tmp/kubeconfig
+    - export KUBECONFIG=/tmp/kubeconfig
+  script:
+    # Create backup
+    - kubectl exec deployment/foundry-backend -n foundry --
+        /scripts/backup.sh pre-deploy-$CI_COMMIT_SHORT_SHA
+
+    # Deploy with canary
+    - helm upgrade --install foundry ./deployment/helm/foundry
+        --namespace foundry
+        --values ./deployment/helm/values-production.yaml
+        --set global.imageTag=$CI_COMMIT_TAG
+        --set global.imageRegistry=$REGISTRY/$IMAGE_NAME
+        --set canary.enabled=true
+        --set canary.weight=10
+        --wait --timeout 10m
+
+    # Monitor canary
+    - |
+      for i in $(seq 1 5); do
+        ERROR_COUNT=$(kubectl exec deployment/foundry-backend -n foundry -- \
+          curl -s localhost:9090/metrics | grep 'http_requests_total.*status="5' | awk '{sum+=$2} END {print sum+0}')
+        echo "Minute $i: Error count = $ERROR_COUNT"
+        if [ "$ERROR_COUNT" -gt 100 ]; then
+          echo "High error rate! Rolling back..."
+          helm rollback foundry -n foundry
+          exit 1
+        fi
+        sleep 60
+      done
+
+    # Full rollout
+    - helm upgrade foundry ./deployment/helm/foundry
+        --namespace foundry
+        --values ./deployment/helm/values-production.yaml
+        --set global.imageTag=$CI_COMMIT_TAG
+        --set global.imageRegistry=$REGISTRY/$IMAGE_NAME
+        --set canary.enabled=false
+        --wait --timeout 10m
+
+    # Verify
+    - kubectl exec deployment/foundry-backend -n foundry -- npm run test:smoke
+  rules:
+    - if: $CI_COMMIT_TAG
+
+# ============================================
+# Rollback (Manual)
+# ============================================
+rollback:production:
+  stage: deploy-production
+  image:
+    name: alpine/helm:3.12.0
+    entrypoint: [""]
+  environment:
+    name: production
+  when: manual
+  before_script:
+    - apk add --no-cache curl
+    - curl -LO "https://dl.k8s.io/release/v1.28.0/bin/linux/amd64/kubectl"
+    - chmod +x kubectl && mv kubectl /usr/local/bin/
+    - echo "$PRODUCTION_KUBECONFIG" | base64 -d > /tmp/kubeconfig
+    - export KUBECONFIG=/tmp/kubeconfig
+  script:
+    - helm rollback foundry -n foundry
+    - kubectl rollout status deployment/foundry-backend -n foundry
+    - kubectl exec deployment/foundry-backend -n foundry -- curl -s localhost:3000/health
+  rules:
+    - if: $CI_COMMIT_TAG

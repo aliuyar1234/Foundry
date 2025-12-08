@@ -1,0 +1,228 @@
+# Foundry Helm Values - Staging Environment
+# Optimized for staging/development with reduced resources
+
+global:
+  environment: staging
+  domain: staging.foundry.io
+  imageRegistry: ghcr.io/foundry
+  imageTag: develop
+  imagePullPolicy: Always
+
+  # Storage class
+  storageClass: standard
+
+# Frontend Configuration
+frontend:
+  enabled: true
+  replicaCount: 2
+
+  image:
+    repository: foundry/frontend
+    pullPolicy: Always
+
+  service:
+    type: ClusterIP
+    port: 80
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+  autoscaling:
+    enabled: false
+
+  env:
+    REACT_APP_API_URL: "https://staging.foundry.io/api"
+    REACT_APP_ENVIRONMENT: "staging"
+
+# Backend Configuration
+backend:
+  enabled: true
+  replicaCount: 2
+
+  image:
+    repository: foundry/backend
+    pullPolicy: Always
+
+  service:
+    type: ClusterIP
+    port: 3000
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+
+  autoscaling:
+    enabled: false
+
+  livenessProbe:
+    enabled: true
+    path: /health
+    initialDelaySeconds: 30
+    periodSeconds: 10
+
+  readinessProbe:
+    enabled: true
+    path: /health/ready
+    initialDelaySeconds: 5
+    periodSeconds: 5
+
+  env:
+    NODE_ENV: staging
+    LOG_LEVEL: debug
+    MAX_FILE_SIZE: "50MB"
+    CORS_ORIGINS: "https://staging.foundry.io"
+
+  secretEnv:
+    JWT_SECRET:
+      secretName: foundry-secrets
+      key: jwt-secret
+    ENCRYPTION_KEY:
+      secretName: foundry-secrets
+      key: encryption-key
+
+# Worker Configuration
+worker:
+  enabled: true
+  replicaCount: 1
+
+  image:
+    repository: foundry/backend
+    pullPolicy: Always
+
+  command: ["npm", "run", "worker"]
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  autoscaling:
+    enabled: false
+
+# PostgreSQL Configuration
+postgresql:
+  enabled: true
+
+  auth:
+    username: foundry
+    database: foundry
+    existingSecret: foundry-secrets
+    secretKeys:
+      adminPasswordKey: postgres-password
+      userPasswordKey: postgres-password
+
+  primary:
+    persistence:
+      enabled: true
+      size: 20Gi
+
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 1Gi
+
+# Neo4j Configuration
+neo4j:
+  enabled: true
+  edition: community
+
+  neo4j:
+    name: neo4j
+    passwordFromSecret: foundry-secrets
+    passwordSecretKey: neo4j-password
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 512Mi
+    limits:
+      cpu: 500m
+      memory: 2Gi
+
+  volumes:
+    data:
+      mode: defaultStorageClass
+      size: 20Gi
+
+  config:
+    dbms.memory.heap.initial_size: 512m
+    dbms.memory.heap.max_size: 1G
+    dbms.memory.pagecache.size: 512m
+
+# Redis Configuration
+redis:
+  enabled: true
+  architecture: standalone
+
+  auth:
+    enabled: false
+
+  master:
+    persistence:
+      enabled: true
+      size: 5Gi
+
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        cpu: 200m
+        memory: 256Mi
+
+# Ingress Configuration
+ingress:
+  enabled: true
+  className: nginx
+
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-staging
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+
+  hosts:
+    - host: staging.foundry.io
+      paths:
+        - path: /
+          pathType: Prefix
+
+  tls:
+    - secretName: foundry-staging-tls
+      hosts:
+        - staging.foundry.io
+
+# Monitoring (disabled for staging)
+monitoring:
+  enabled: true
+  serviceMonitor:
+    enabled: false
+  grafanaDashboards:
+    enabled: false
+
+# Network Policies (disabled for staging)
+networkPolicy:
+  enabled: false
+
+# Pod Disruption Budget (disabled for staging)
+podDisruptionBudget:
+  frontend:
+    enabled: false
+  backend:
+    enabled: false
+  worker:
+    enabled: false

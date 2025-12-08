@@ -1,0 +1,44 @@
+# =============================================================================
+# Foundry Helm Chart
+# SCALE Tier - Task T152-T153
+#
+# Kubernetes deployment chart for Foundry Enterprise AI Foundation
+# =============================================================================
+
+apiVersion: v2
+name: foundry
+description: Enterprise AI Foundation Platform for Process Intelligence
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+
+keywords:
+  - foundry
+  - process-mining
+  - enterprise-ai
+  - process-intelligence
+
+home: https://github.com/yourorg/foundry
+icon: https://yourcdn.com/foundry-icon.png
+
+sources:
+  - https://github.com/yourorg/foundry
+
+maintainers:
+  - name: Foundry Team
+    email: team@foundry.dev
+
+annotations:
+  category: Enterprise
+  licenses: MIT
+
+dependencies:
+  - name: postgresql
+    version: "~13.2"
+    repository: https://charts.bitnami.com/bitnami
+    condition: postgresql.enabled
+
+  - name: redis
+    version: "~18.3"
+    repository: https://charts.bitnami.com/bitnami
+    condition: redis.enabled

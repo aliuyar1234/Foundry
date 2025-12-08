@@ -1,0 +1,408 @@
+# Foundry Helm Values - Production Environment
+# Optimized for high availability, performance, and security
+
+global:
+  environment: production
+  domain: foundry.io
+  imageRegistry: ghcr.io/foundry
+  imageTag: latest
+  imagePullPolicy: IfNotPresent
+
+  # Production storage class (SSD-backed)
+  storageClass: fast-ssd
+
+  # Image pull secrets
+  imagePullSecrets:
+    - name: registry-credentials
+
+  # Node selector for production workloads
+  nodeSelector:
+    workload-type: production
+
+  # Tolerations
+  tolerations: []
+
+  # Pod anti-affinity to spread across nodes
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - foundry-backend
+            topologyKey: kubernetes.io/hostname
+
+# Frontend Configuration
+frontend:
+  enabled: true
+  replicaCount: 3
+
+  image:
+    repository: foundry/frontend
+    pullPolicy: IfNotPresent
+
+  service:
+    type: ClusterIP
+    port: 80
+    annotations:
+      service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 2
+
+  env:
+    REACT_APP_API_URL: "https://foundry.io/api"
+    REACT_APP_ENVIRONMENT: "production"
+
+# Backend Configuration
+backend:
+  enabled: true
+  replicaCount: 3
+
+  image:
+    repository: foundry/backend
+    pullPolicy: IfNotPresent
+
+  service:
+    type: ClusterIP
+    port: 3000
+
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 20
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+
+  livenessProbe:
+    enabled: true
+    path: /health
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+  readinessProbe:
+    enabled: true
+    path: /health/ready
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 2
+
+  env:
+    NODE_ENV: production
+    LOG_LEVEL: info
+    MAX_FILE_SIZE: "50MB"
+    CORS_ORIGINS: "https://foundry.io"
+    RATE_LIMIT_WINDOW_MS: "60000"
+    RATE_LIMIT_MAX_REQUESTS: "100"
+
+  secretEnv:
+    JWT_SECRET:
+      secretName: foundry-secrets
+      key: jwt-secret
+    ENCRYPTION_KEY:
+      secretName: foundry-secrets
+      key: encryption-key
+
+# Worker Configuration
+worker:
+  enabled: true
+  replicaCount: 3
+
+  image:
+    repository: foundry/backend
+    pullPolicy: IfNotPresent
+
+  command: ["npm", "run", "worker"]
+
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 15
+    targetCPUUtilizationPercentage: 70
+
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+
+# PostgreSQL Configuration (Production)
+postgresql:
+  enabled: true
+  architecture: replication
+
+  auth:
+    username: foundry
+    database: foundry
+    existingSecret: foundry-secrets
+    secretKeys:
+      adminPasswordKey: postgres-password
+      userPasswordKey: postgres-password
+
+  primary:
+    persistence:
+      enabled: true
+      size: 500Gi
+      storageClass: fast-ssd
+
+    resources:
+      requests:
+        cpu: 500m
+        memory: 2Gi
+      limits:
+        cpu: 2000m
+        memory: 8Gi
+
+    configuration: |
+      max_connections = 200
+      shared_buffers = 2GB
+      effective_cache_size = 6GB
+      maintenance_work_mem = 512MB
+      checkpoint_completion_target = 0.9
+      wal_buffers = 64MB
+      default_statistics_target = 100
+      random_page_cost = 1.1
+      effective_io_concurrency = 200
+      work_mem = 10MB
+      min_wal_size = 1GB
+      max_wal_size = 4GB
+
+  readReplicas:
+    replicaCount: 2
+    persistence:
+      enabled: true
+      size: 500Gi
+      storageClass: fast-ssd
+
+    resources:
+      requests:
+        cpu: 500m
+        memory: 2Gi
+      limits:
+        cpu: 2000m
+        memory: 8Gi
+
+# Neo4j Configuration (Production)
+neo4j:
+  enabled: true
+  edition: enterprise  # Use enterprise for production
+
+  neo4j:
+    name: neo4j
+    passwordFromSecret: foundry-secrets
+    passwordSecretKey: neo4j-password
+
+  resources:
+    requests:
+      cpu: 500m
+      memory: 2Gi
+    limits:
+      cpu: 2000m
+      memory: 8Gi
+
+  volumes:
+    data:
+      mode: defaultStorageClass
+      size: 500Gi
+
+  config:
+    dbms.memory.heap.initial_size: 2g
+    dbms.memory.heap.max_size: 4g
+    dbms.memory.pagecache.size: 2g
+    dbms.logs.query.enabled: INFO
+    dbms.logs.query.threshold: 1s
+
+# Redis Configuration (Production with Replication)
+redis:
+  enabled: true
+  architecture: replication
+
+  auth:
+    enabled: true
+    existingSecret: foundry-secrets
+    existingSecretPasswordKey: redis-password
+
+  master:
+    persistence:
+      enabled: true
+      size: 20Gi
+      storageClass: fast-ssd
+
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 1Gi
+
+  replica:
+    replicaCount: 2
+    persistence:
+      enabled: true
+      size: 20Gi
+
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 1Gi
+
+# Ingress Configuration (Production)
+ingress:
+  enabled: true
+  className: nginx
+
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "60"
+    # Security headers
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      more_set_headers "X-Frame-Options: DENY";
+      more_set_headers "X-Content-Type-Options: nosniff";
+      more_set_headers "X-XSS-Protection: 1; mode=block";
+      more_set_headers "Strict-Transport-Security: max-age=31536000; includeSubDomains";
+
+  hosts:
+    - host: foundry.io
+      paths:
+        - path: /
+          pathType: Prefix
+
+  tls:
+    - secretName: foundry-tls
+      hosts:
+        - foundry.io
+
+# Monitoring Configuration
+monitoring:
+  enabled: true
+
+  serviceMonitor:
+    enabled: true
+    interval: 30s
+    scrapeTimeout: 10s
+    labels:
+      release: prometheus
+
+  grafanaDashboards:
+    enabled: true
+    labels:
+      grafana_dashboard: "1"
+
+  prometheusRules:
+    enabled: true
+    rules:
+      - alert: FoundryBackendDown
+        expr: up{job="foundry-backend"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Foundry backend is down"
+
+      - alert: FoundryHighErrorRate
+        expr: |
+          sum(rate(http_requests_total{job="foundry-backend",status=~"5.."}[5m]))
+          / sum(rate(http_requests_total{job="foundry-backend"}[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High error rate detected"
+
+      - alert: FoundryHighLatency
+        expr: |
+          histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job="foundry-backend"}[5m])) by (le)) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High latency detected"
+
+# Network Policies (Production)
+networkPolicy:
+  enabled: true
+
+  ingress:
+    namespaceSelector:
+      matchLabels:
+        name: ingress-nginx
+
+  egress:
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+
+# Service Account
+serviceAccount:
+  create: true
+  name: foundry
+  annotations:
+    # AWS IAM role for service account (if using AWS)
+    # eks.amazonaws.com/role-arn: arn:aws:iam::123456789:role/foundry-sa-role
+
+# Canary Deployment (for production updates)
+canary:
+  enabled: false
+  weight: 0
+
+# Backup Configuration
+backup:
+  enabled: true
+  schedule: "0 2 * * *"  # Daily at 2 AM
+  retention: 30
+  s3Bucket: foundry-backups

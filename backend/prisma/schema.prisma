@@ -817,3 +817,335 @@ model EnrichmentJob {
   @@index([status])
   @@index([createdAt])
 }
+
+// -----------------------------------------------------------------------------
+// SCALE Tier Models (003-scale-enterprise)
+// -----------------------------------------------------------------------------
+
+// T001-T003, T017: Entity (Multi-Tenant) model with hierarchy support
+model Entity {
+  id                String         @id @default(cuid())
+  name              String
+  slug              String         @unique
+  parentEntityId    String?
+  configuration     Json           @default("{}")
+  status            TenantStatus   @default(ACTIVE)
+  dataRetentionDays Int            @default(730)
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  parent            Entity?        @relation("EntityHierarchy", fields: [parentEntityId], references: [id])
+  children          Entity[]       @relation("EntityHierarchy")
+  dataSources       DataSource[]   @relation("EntityDataSources")
+  ssoConfigurations SsoConfiguration[]
+  scimLogs          ScimSyncLog[]
+  apiTokens         ApiToken[]
+  resellerAccount   ResellerAccount? @relation(fields: [resellerId], references: [id])
+  resellerId        String?
+  userPermissions   UserEntityPermission[]
+
+  @@index([parentEntityId])
+  @@index([status])
+  @@index([resellerId])
+}
+
+// T002: EntityStatus enum for tenant lifecycle
+enum TenantStatus {
+  ACTIVE
+  SUSPENDED
+  ARCHIVED
+}
+
+// T017: UserEntityPermission for cross-entity access
+model UserEntityPermission {
+  id        String   @id @default(cuid())
+  userId    String
+  entityId  String
+  canRead   Boolean  @default(true)
+  canWrite  Boolean  @default(false)
+  canAdmin  Boolean  @default(false)
+  grantedBy String
+  grantedAt DateTime @default(now())
+
+  entity    Entity   @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, entityId])
+  @@index([userId])
+  @@index([entityId])
+}
+
+// T051-T053: PartnerApplication model for Partner API
+model PartnerApplication {
+  id               String            @id @default(cuid())
+  name             String
+  description      String?           @db.Text
+  clientId         String            @unique @default(cuid())
+  clientSecretHash String
+  redirectUris     String[]
+  scopes           String[]
+  rateLimitTier    RateLimitTier     @default(STANDARD)
+  webhookUrl       String?
+  webhookSecret    String?
+  isActive         Boolean           @default(true)
+  ownerId          String
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  tokens           ApiToken[]
+  webhookSubscriptions WebhookSubscription[]
+
+  @@index([clientId])
+  @@index([ownerId])
+}
+
+// T053: RateLimitTier enum
+enum RateLimitTier {
+  FREE       // 100 req/hour
+  STANDARD   // 1000 req/hour
+  PREMIUM    // 10000 req/hour
+}
+
+// T052: ApiToken model for OAuth tokens
+model ApiToken {
+  id               String            @id @default(cuid())
+  applicationId    String
+  userId           String
+  entityId         String
+  accessTokenHash  String            @unique
+  refreshTokenHash String?           @unique
+  scopes           String[]
+  expiresAt        DateTime
+  lastUsedAt       DateTime?
+  revokedAt        DateTime?
+  createdAt        DateTime          @default(now())
+
+  application      PartnerApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  entity           Entity            @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId])
+  @@index([userId])
+  @@index([entityId])
+}
+
+// T089: ApiAuditLog for partner API audit trail
+model ApiAuditLog {
+  id              String   @id @default(cuid())
+  applicationId   String
+  userId          String?
+  entityId        String
+  method          String
+  path            String
+  statusCode      Int
+  requestSize     Int
+  responseSize    Int
+  durationMs      Int
+  ipAddress       String
+  userAgent       String?
+  errorMessage    String?
+  createdAt       DateTime @default(now())
+
+  @@index([applicationId])
+  @@index([entityId])
+  @@index([createdAt])
+}
+
+// T070-T075: WebhookSubscription model
+model WebhookSubscription {
+  id              String   @id @default(cuid())
+  applicationId   String
+  eventTypes      String[]
+  targetUrl       String
+  secret          String
+  isActive        Boolean  @default(true)
+  failureCount    Int      @default(0)
+  lastDeliveredAt DateTime?
+  lastFailedAt    DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  application     PartnerApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  deliveries      WebhookDelivery[]
+
+  @@index([applicationId])
+  @@index([isActive])
+}
+
+// WebhookDelivery for tracking delivery attempts
+model WebhookDelivery {
+  id              String   @id @default(cuid())
+  subscriptionId  String
+  eventType       String
+  payload         Json
+  status          String   // 'pending' | 'delivered' | 'failed' | 'retrying'
+  attempts        Int      @default(0)
+  lastAttemptAt   DateTime?
+  deliveredAt     DateTime?
+  statusCode      Int?
+  responseBody    String?  @db.Text
+  errorMessage    String?
+  createdAt       DateTime @default(now())
+
+  subscription    WebhookSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@index([subscriptionId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+// T103-T106: ResellerAccount model for white-label
+model ResellerAccount {
+  id               String            @id @default(cuid())
+  name             String
+  contactEmail     String
+  billingEmail     String
+  commissionRate   Float             @default(0)
+  tier             ResellerTier
+  isActive         Boolean           @default(true)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  whiteLabelConfigs WhiteLabelConfig[]
+  entities         Entity[]
+}
+
+// T105: ResellerTier enum
+enum ResellerTier {
+  RESELLER_STARTER
+  RESELLER_PROFESSIONAL
+  RESELLER_ENTERPRISE
+}
+
+// T104: WhiteLabelConfig model
+model WhiteLabelConfig {
+  id               String            @id @default(cuid())
+  resellerId       String
+  name             String
+  customDomain     String?           @unique
+  branding         Json              // { logo, colors, fonts }
+  features         Json              @default("{}")
+  customCss        String?           @db.Text
+  isActive         Boolean           @default(true)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  reseller         ResellerAccount   @relation(fields: [resellerId], references: [id], onDelete: Cascade)
+
+  @@index([resellerId])
+  @@index([customDomain])
+}
+
+// T245-T249: SsoConfiguration model for enterprise SSO
+model SsoConfiguration {
+  id               String            @id @default(cuid())
+  entityId         String
+  providerType     SsoProviderType
+  providerName     String
+  configuration    Json              // IdP-specific config (metadata, endpoints)
+  attributeMapping Json              // SAML/OIDC attribute → user field mapping
+  groupRoleMapping Json              @default("{}")
+  isActive         Boolean           @default(false)
+  lastSyncAt       DateTime?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  entity           Entity            @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  scimLogs         ScimSyncLog[]
+
+  @@unique([entityId, providerType])
+  @@index([entityId])
+}
+
+// T247: SsoProviderType enum
+enum SsoProviderType {
+  SAML
+  OIDC
+}
+
+// T246, T248: ScimSyncLog model
+model ScimSyncLog {
+  id               String            @id @default(cuid())
+  entityId         String
+  ssoConfigId      String
+  operation        ScimOperation
+  resourceType     ScimResourceType
+  resourceId       String
+  localUserId      String?
+  changes          Json
+  status           ScimSyncStatus
+  errorMessage     String?           @db.Text
+  createdAt        DateTime          @default(now())
+
+  entity           Entity            @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  ssoConfig        SsoConfiguration  @relation(fields: [ssoConfigId], references: [id], onDelete: Cascade)
+
+  @@index([entityId, createdAt])
+  @@index([ssoConfigId])
+}
+
+// T248: SCIM enums
+enum ScimOperation {
+  SCIM_CREATE
+  SCIM_UPDATE
+  SCIM_DELETE
+}
+
+enum ScimResourceType {
+  SCIM_USER
+  SCIM_GROUP
+}
+
+enum ScimSyncStatus {
+  SCIM_SUCCESS
+  SCIM_FAILED
+}
+
+// T201-T204: BenchmarkSegment model for cross-company intelligence
+model BenchmarkSegment {
+  id               String            @id @default(cuid())
+  name             String
+  industry         String
+  sizeRange        String
+  region           String            @default("DACH")
+  participantCount Int               @default(0)
+  minimumRequired  Int               @default(10)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  metrics          AnonymizedMetric[]
+
+  @@unique([industry, sizeRange, region])
+}
+
+// T202: AnonymizedMetric model
+model AnonymizedMetric {
+  id               String            @id @default(cuid())
+  segmentId        String
+  metricType       String
+  value            Float
+  sampleSize       Int
+  confidenceLevel  Float
+  periodStart      DateTime          @db.Date
+  periodEnd        DateTime          @db.Date
+  createdAt        DateTime          @default(now())
+
+  segment          BenchmarkSegment  @relation(fields: [segmentId], references: [id], onDelete: Cascade)
+
+  @@index([segmentId, metricType])
+  @@index([periodStart, periodEnd])
+}
+
+// T203: BenchmarkOptIn tracking
+model BenchmarkOptIn {
+  id               String   @id @default(cuid())
+  organizationId   String   @unique
+  isOptedIn        Boolean  @default(false)
+  consentGivenBy   String?
+  consentGivenAt   DateTime?
+  optOutRequestedBy String?
+  optOutRequestedAt DateTime?
+  dataRemovedAt    DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([isOptedIn])
+}

@@ -1,0 +1,327 @@
+# Prometheus Alerting Rules for Foundry
+# T367 - Create alerting rules for critical metrics
+
+groups:
+  # ==========================================================================
+  # HTTP Request Alerts
+  # ==========================================================================
+  - name: http_alerts
+    rules:
+      - alert: HighErrorRate
+        expr: |
+          sum(rate(foundry_http_requests_total{status_code=~"5.."}[5m]))
+          / sum(rate(foundry_http_requests_total[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High HTTP error rate detected"
+          description: "Error rate is {{ $value | humanizePercentage }} (threshold: 5%)"
+
+      - alert: HighLatency
+        expr: |
+          histogram_quantile(0.95, sum(rate(foundry_http_request_duration_seconds_bucket[5m])) by (le)) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High p95 latency detected"
+          description: "p95 latency is {{ $value | humanizeDuration }} (threshold: 500ms)"
+
+      - alert: VeryHighLatency
+        expr: |
+          histogram_quantile(0.99, sum(rate(foundry_http_request_duration_seconds_bucket[5m])) by (le)) > 2
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Very high p99 latency detected"
+          description: "p99 latency is {{ $value | humanizeDuration }} (threshold: 2s)"
+
+      - alert: LowRequestRate
+        expr: |
+          sum(rate(foundry_http_requests_total[5m])) < 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Unusually low request rate"
+          description: "Request rate is {{ $value }} req/s"
+
+  # ==========================================================================
+  # Partner API Alerts
+  # ==========================================================================
+  - name: partner_api_alerts
+    rules:
+      - alert: PartnerAPIHighLatency
+        expr: |
+          histogram_quantile(0.95, sum(rate(foundry_partner_api_latency_seconds_bucket[5m])) by (le)) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Partner API p95 latency exceeds 100ms target"
+          description: "p95 latency is {{ $value | humanizeDuration }}"
+
+      - alert: PartnerAPIRateLimitSpike
+        expr: |
+          sum(rate(foundry_partner_api_rate_limit_hits_total[5m])) > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High rate of rate limit hits"
+          description: "{{ $value }} rate limit hits per second"
+
+      - alert: PartnerAPIErrors
+        expr: |
+          sum(rate(foundry_partner_api_requests_total{status_code=~"5.."}[5m]))
+          / sum(rate(foundry_partner_api_requests_total[5m])) > 0.01
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Partner API error rate above threshold"
+          description: "Error rate is {{ $value | humanizePercentage }}"
+
+  # ==========================================================================
+  # Authentication Alerts
+  # ==========================================================================
+  - name: auth_alerts
+    rules:
+      - alert: AuthenticationFailureSpike
+        expr: |
+          sum(rate(foundry_auth_attempts_total{status="failure"}[5m]))
+          / sum(rate(foundry_auth_attempts_total[5m])) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High authentication failure rate"
+          description: "Failure rate is {{ $value | humanizePercentage }}"
+
+      - alert: SSOAuthenticationSlow
+        expr: |
+          histogram_quantile(0.95, sum(rate(foundry_auth_duration_seconds_bucket[5m])) by (le, method)) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "SSO authentication latency is high"
+          description: "p95 authentication time is {{ $value | humanizeDuration }}"
+
+      - alert: ActiveSessionsAnomaly
+        expr: |
+          abs(sum(foundry_active_sessions_total) - sum(foundry_active_sessions_total offset 1h))
+          / sum(foundry_active_sessions_total offset 1h) > 0.5
+        for: 15m
+        labels:
+          severity: info
+        annotations:
+          summary: "Unusual change in active sessions"
+          description: "Session count changed by more than 50% in the last hour"
+
+  # ==========================================================================
+  # Webhook Alerts
+  # ==========================================================================
+  - name: webhook_alerts
+    rules:
+      - alert: WebhookDeliveryFailures
+        expr: |
+          sum(rate(foundry_webhook_deliveries_total{status="failure"}[5m]))
+          / sum(rate(foundry_webhook_deliveries_total[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Webhook delivery failure rate is high"
+          description: "Failure rate is {{ $value | humanizePercentage }}"
+
+      - alert: WebhookQueueBacklog
+        expr: foundry_webhook_queue_size > 1000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Webhook queue backlog detected"
+          description: "Queue size is {{ $value }}"
+
+      - alert: WebhookQueueCritical
+        expr: foundry_webhook_queue_size > 10000
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critical webhook queue backlog"
+          description: "Queue size is {{ $value }}, immediate attention required"
+
+      - alert: WebhookDeliveryLatency
+        expr: |
+          histogram_quantile(0.95, sum(rate(foundry_webhook_delivery_latency_seconds_bucket[5m])) by (le)) > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Webhook delivery latency is high"
+          description: "p95 delivery time is {{ $value | humanizeDuration }}"
+
+  # ==========================================================================
+  # Database Alerts
+  # ==========================================================================
+  - name: database_alerts
+    rules:
+      - alert: DatabaseQuerySlow
+        expr: |
+          histogram_quantile(0.95, sum(rate(foundry_db_query_duration_seconds_bucket[5m])) by (le)) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Database queries are slow"
+          description: "p95 query time is {{ $value | humanizeDuration }}"
+
+      - alert: DatabaseConnectionPoolExhausted
+        expr: |
+          foundry_db_connection_pool_size{state="active"}
+          / (foundry_db_connection_pool_size{state="active"} + foundry_db_connection_pool_size{state="idle"}) > 0.9
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Database connection pool nearly exhausted"
+          description: "{{ $value | humanizePercentage }} of connections are active"
+
+      - alert: DatabaseQueryErrors
+        expr: sum(rate(foundry_db_query_errors_total[5m])) > 1
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Database query errors detected"
+          description: "{{ $value }} errors per second"
+
+  # ==========================================================================
+  # Cache Alerts
+  # ==========================================================================
+  - name: cache_alerts
+    rules:
+      - alert: LowCacheHitRate
+        expr: foundry_cache_hit_rate{cache_type="redis"} < 0.5
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Cache hit rate is low"
+          description: "Hit rate is {{ $value | humanizePercentage }}"
+
+      - alert: CacheLatencyHigh
+        expr: |
+          histogram_quantile(0.95, sum(rate(foundry_cache_latency_seconds_bucket[5m])) by (le)) > 0.01
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Cache latency is high"
+          description: "p95 cache latency is {{ $value | humanizeDuration }}"
+
+  # ==========================================================================
+  # Job Queue Alerts
+  # ==========================================================================
+  - name: job_alerts
+    rules:
+      - alert: JobQueueBacklog
+        expr: foundry_job_queue_size{state="waiting"} > 1000
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Job queue has significant backlog"
+          description: "{{ $value }} jobs waiting in queue {{ $labels.queue }}"
+
+      - alert: JobFailureRate
+        expr: |
+          sum(rate(foundry_jobs_total{status="failed"}[5m])) by (queue)
+          / sum(rate(foundry_jobs_total[5m])) by (queue) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High job failure rate"
+          description: "Failure rate is {{ $value | humanizePercentage }} for queue {{ $labels.queue }}"
+
+      - alert: JobProcessingLatency
+        expr: |
+          histogram_quantile(0.95, sum(rate(foundry_job_duration_seconds_bucket[5m])) by (le, queue)) > 60
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Jobs taking too long to process"
+          description: "p95 processing time is {{ $value | humanizeDuration }} for queue {{ $labels.queue }}"
+
+  # ==========================================================================
+  # Entity & Business Alerts
+  # ==========================================================================
+  - name: business_alerts
+    rules:
+      - alert: NoDataSourceSyncs
+        expr: |
+          sum(rate(foundry_data_source_syncs_total[1h])) == 0
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "No data source syncs in the last hour"
+          description: "Check if data source sync jobs are running"
+
+      - alert: DataSourceSyncErrors
+        expr: |
+          sum(rate(foundry_data_source_syncs_total{status="error"}[5m]))
+          / sum(rate(foundry_data_source_syncs_total[5m])) > 0.1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High data source sync error rate"
+          description: "Error rate is {{ $value | humanizePercentage }}"
+
+      - alert: EntityCountAnomaly
+        expr: |
+          abs(sum(foundry_entities_total{status="ACTIVE"}) - sum(foundry_entities_total{status="ACTIVE"} offset 1d)) > 10
+        for: 15m
+        labels:
+          severity: info
+        annotations:
+          summary: "Unusual change in entity count"
+          description: "Entity count changed significantly in the last day"
+
+  # ==========================================================================
+  # Infrastructure Alerts (Node.js specific)
+  # ==========================================================================
+  - name: infrastructure_alerts
+    rules:
+      - alert: HighMemoryUsage
+        expr: foundry_nodejs_heap_size_used_bytes / foundry_nodejs_heap_size_total_bytes > 0.9
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High Node.js heap memory usage"
+          description: "Heap usage is {{ $value | humanizePercentage }}"
+
+      - alert: HighEventLoopLag
+        expr: foundry_nodejs_eventloop_lag_seconds > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High Node.js event loop lag"
+          description: "Event loop lag is {{ $value | humanizeDuration }}"
+
+      - alert: ProcessRestart
+        expr: changes(foundry_process_start_time_seconds[15m]) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "Process restarted"
+          description: "Foundry process has restarted"

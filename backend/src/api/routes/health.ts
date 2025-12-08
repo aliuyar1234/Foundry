@@ -410,3 +410,316 @@ export async function getHealthStatus(): Promise<HealthStatus> {
     checks,
   };
 }
+
+// ==========================================
+// T250 - Claude API Health Check
+// ==========================================
+
+// Claude API configuration
+let claudeApiKey: string | null = null;
+let claudeApiUrl = 'https://api.anthropic.com/v1';
+
+export function setClaudeApiConfig(apiKey: string, apiUrl?: string): void {
+  claudeApiKey = apiKey;
+  if (apiUrl) claudeApiUrl = apiUrl;
+}
+
+/**
+ * Check Claude API connectivity and status
+ */
+export async function checkClaudeAPI(): Promise<ComponentCheck> {
+  const start = Date.now();
+
+  if (!claudeApiKey) {
+    return {
+      name: 'claude_api',
+      status: 'warn',
+      responseTime: Date.now() - start,
+      message: 'Claude API key not configured',
+    };
+  }
+
+  try {
+    // Use a lightweight API call to check connectivity
+    // Note: Using messages endpoint with minimal tokens to verify API access
+    const response = await fetch(`${claudeApiUrl}/messages`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': claudeApiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: 'claude-3-haiku-20240307',
+        max_tokens: 1,
+        messages: [{ role: 'user', content: 'ping' }],
+      }),
+      signal: AbortSignal.timeout(10000), // 10 second timeout
+    });
+
+    const responseTime = Date.now() - start;
+
+    if (response.ok) {
+      // Get rate limit info from headers if available
+      const rateLimit = response.headers.get('x-ratelimit-limit-tokens');
+      const rateLimitRemaining = response.headers.get('x-ratelimit-remaining-tokens');
+
+      return {
+        name: 'claude_api',
+        status: 'pass',
+        responseTime,
+        message: 'Connected',
+        details: {
+          model: 'claude-3-haiku-20240307',
+          rateLimit: rateLimit ? parseInt(rateLimit) : undefined,
+          rateLimitRemaining: rateLimitRemaining ? parseInt(rateLimitRemaining) : undefined,
+        },
+      };
+    }
+
+    // Handle specific error cases
+    if (response.status === 401) {
+      return {
+        name: 'claude_api',
+        status: 'fail',
+        responseTime,
+        message: 'Invalid API key',
+      };
+    }
+
+    if (response.status === 429) {
+      const retryAfter = response.headers.get('retry-after');
+      return {
+        name: 'claude_api',
+        status: 'warn',
+        responseTime,
+        message: 'Rate limited',
+        details: {
+          retryAfter: retryAfter ? parseInt(retryAfter) : undefined,
+        },
+      };
+    }
+
+    if (response.status >= 500) {
+      return {
+        name: 'claude_api',
+        status: 'fail',
+        responseTime,
+        message: `API error: ${response.status}`,
+      };
+    }
+
+    // For other errors, consider it a warning
+    return {
+      name: 'claude_api',
+      status: 'warn',
+      responseTime,
+      message: `Unexpected status: ${response.status}`,
+    };
+  } catch (error) {
+    const responseTime = Date.now() - start;
+    const errorMessage = error instanceof Error ? error.message : 'Connection failed';
+
+    // Check for timeout
+    if (errorMessage.includes('timeout') || errorMessage.includes('aborted')) {
+      return {
+        name: 'claude_api',
+        status: 'warn',
+        responseTime,
+        message: 'Request timeout - API may be slow',
+      };
+    }
+
+    return {
+      name: 'claude_api',
+      status: 'fail',
+      responseTime,
+      message: errorMessage,
+    };
+  }
+}
+
+// ==========================================
+// T251 - SSE Connections Health Check
+// ==========================================
+
+// SSE Manager reference
+interface SSEStats {
+  totalClients: number;
+  clientsByOrg: Record<string, number>;
+  channelSubscriptions: Record<string, number>;
+}
+
+type SSEStatsGetter = () => SSEStats;
+let getSSEStats: SSEStatsGetter | null = null;
+
+export function setSSEStatsGetter(getter: SSEStatsGetter): void {
+  getSSEStats = getter;
+}
+
+/**
+ * Check SSE connections health
+ */
+export async function checkSSEConnections(): Promise<ComponentCheck> {
+  const start = Date.now();
+
+  if (!getSSEStats) {
+    return {
+      name: 'sse_connections',
+      status: 'warn',
+      responseTime: Date.now() - start,
+      message: 'SSE manager not configured',
+    };
+  }
+
+  try {
+    const stats = getSSEStats();
+    const responseTime = Date.now() - start;
+
+    // Define thresholds
+    const MAX_CONNECTIONS_WARNING = 5000;
+    const MAX_CONNECTIONS_CRITICAL = 9000;
+
+    let status: 'pass' | 'warn' | 'fail' = 'pass';
+    let message = `Active connections: ${stats.totalClients}`;
+
+    if (stats.totalClients >= MAX_CONNECTIONS_CRITICAL) {
+      status = 'fail';
+      message = `Connection limit critical: ${stats.totalClients}/${MAX_CONNECTIONS_CRITICAL}`;
+    } else if (stats.totalClients >= MAX_CONNECTIONS_WARNING) {
+      status = 'warn';
+      message = `High connection count: ${stats.totalClients}`;
+    }
+
+    // Calculate channel distribution
+    const totalSubscriptions = Object.values(stats.channelSubscriptions).reduce(
+      (sum, count) => sum + count,
+      0
+    );
+
+    const orgsConnected = Object.keys(stats.clientsByOrg).length;
+
+    return {
+      name: 'sse_connections',
+      status,
+      responseTime,
+      message,
+      details: {
+        totalConnections: stats.totalClients,
+        organizationsConnected: orgsConnected,
+        totalChannelSubscriptions: totalSubscriptions,
+        channelBreakdown: stats.channelSubscriptions,
+        connectionsByOrg: stats.clientsByOrg,
+      },
+    };
+  } catch (error) {
+    return {
+      name: 'sse_connections',
+      status: 'fail',
+      responseTime: Date.now() - start,
+      message: error instanceof Error ? error.message : 'Failed to get SSE stats',
+    };
+  }
+}
+
+/**
+ * Check SSE connection memory usage
+ */
+export async function checkSSEMemory(): Promise<ComponentCheck> {
+  const start = Date.now();
+
+  if (!getSSEStats) {
+    return {
+      name: 'sse_memory',
+      status: 'warn',
+      responseTime: Date.now() - start,
+      message: 'SSE manager not configured',
+    };
+  }
+
+  try {
+    const stats = getSSEStats();
+
+    // Estimate memory per connection (rough estimate)
+    const BYTES_PER_CONNECTION = 2048; // ~2KB per connection
+    const estimatedMemoryMB = (stats.totalClients * BYTES_PER_CONNECTION) / (1024 * 1024);
+
+    const memoryUsage = process.memoryUsage();
+    const heapUsedMB = memoryUsage.heapUsed / (1024 * 1024);
+
+    // SSE memory as percentage of heap
+    const sseMemoryPercent = (estimatedMemoryMB / heapUsedMB) * 100;
+
+    let status: 'pass' | 'warn' | 'fail' = 'pass';
+    if (sseMemoryPercent > 30) {
+      status = 'warn';
+    } else if (sseMemoryPercent > 50) {
+      status = 'fail';
+    }
+
+    return {
+      name: 'sse_memory',
+      status,
+      responseTime: Date.now() - start,
+      message: `SSE estimated memory: ${estimatedMemoryMB.toFixed(2)}MB`,
+      details: {
+        estimatedSSEMemoryMB: estimatedMemoryMB,
+        heapUsedMB: heapUsedMB,
+        sseMemoryPercent: sseMemoryPercent.toFixed(2),
+        connectionsCount: stats.totalClients,
+      },
+    };
+  } catch (error) {
+    return {
+      name: 'sse_memory',
+      status: 'fail',
+      responseTime: Date.now() - start,
+      message: error instanceof Error ? error.message : 'Failed to check SSE memory',
+    };
+  }
+}
+
+/**
+ * Extended health checks including OPERATE tier components
+ */
+export async function runExtendedHealthChecks(): Promise<ComponentCheck[]> {
+  const checks = await Promise.all([
+    checkPostgres(),
+    checkNeo4j(),
+    checkRedis(),
+    checkMemory(),
+    checkEventLoop(),
+    checkClaudeAPI(),
+    checkSSEConnections(),
+    checkSSEMemory(),
+  ]);
+
+  return checks;
+}
+
+/**
+ * Get extended health status including OPERATE components
+ */
+export async function getExtendedHealthStatus(): Promise<HealthStatus> {
+  const checks = await runExtendedHealthChecks();
+
+  const hasFailures = checks.some((c) => c.status === 'fail');
+  const hasWarnings = checks.some((c) => c.status === 'warn');
+
+  let status: 'healthy' | 'degraded' | 'unhealthy';
+  if (hasFailures) {
+    status = 'unhealthy';
+  } else if (hasWarnings) {
+    status = 'degraded';
+  } else {
+    status = 'healthy';
+  }
+
+  return {
+    status,
+    timestamp: new Date().toISOString(),
+    version: APP_VERSION,
+    uptime: Math.floor((Date.now() - startTime) / 1000),
+    checks,
+  };
+}

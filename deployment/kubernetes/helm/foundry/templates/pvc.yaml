@@ -1,0 +1,24 @@
+# =============================================================================
+# Foundry Persistent Volume Claims
+# SCALE Tier - Task T161
+#
+# Kubernetes PVCs for persistent storage
+# =============================================================================
+
+---
+# Backend Uploads PVC
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "foundry.fullname" . }}-uploads
+  labels:
+    {{- include "foundry.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteMany
+  {{- if .Values.global.storageClass }}
+  storageClassName: {{ .Values.global.storageClass | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: 10Gi
