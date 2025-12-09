@@ -3,7 +3,7 @@
   <img src="https://img.shields.io/badge/React-18-61DAFB?style=for-the-badge&logo=react&logoColor=black" alt="React" />
   <img src="https://img.shields.io/badge/Node.js-18+-339933?style=for-the-badge&logo=node.js&logoColor=white" alt="Node.js" />
   <img src="https://img.shields.io/badge/PostgreSQL-15-4169E1?style=for-the-badge&logo=postgresql&logoColor=white" alt="PostgreSQL" />
-  <img src="https://img.shields.io/badge/License-Proprietary-red?style=for-the-badge" alt="License" />
+  <img src="https://img.shields.io/badge/License-AGPL--3.0-blue?style=for-the-badge" alt="License" />
 </p>
 
 <h1 align="center">Foundry</h1>
@@ -431,7 +431,7 @@ npx prisma migrate dev --name <description>
 
 ## License
 
-This project is proprietary software. All rights reserved.
+This project is licensed under AGPL-3.0. See [LICENSE](./LICENSE) for details.
 
 ---
 
